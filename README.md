@@ -1,93 +1,213 @@
-# pfa_wasteheat_data_cleaning
+# PFA Waste Heat Data Cleaning
 
-
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.dlr.de/DI/pfa_wasteheat_data_cleaning.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.dlr.de/DI/pfa_wasteheat_data_cleaning/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
+A Python-based data analysis pipeline for cleaning, processing, and analyzing waste heat potential data from industrial facilities in Germany. This project is part of the DLR (Deutsches Zentrum für Luft- und Raumfahrt) energy profile research initiative.
 
 ## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+This project provides a comprehensive pipeline for processing waste heat data from industrial sites. It includes:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- **Data Cleaning**: Automated cleaning of textual and numerical data from Excel datasets
+- **Energy Calculations**: Computation of energy metrics based on temperature, flow rate, and operating hours
+- **Geocoding**: Integration with geopy to geocode facility addresses and obtain coordinates
+- **Waste Heat Classification**: Automated categorization of waste heat sources using LLM (Blablador) and manual rule-based approaches
+- **Data Validation**: Sanity checks and consistency validation throughout the pipeline
+
+The pipeline processes data from the "Abwärmepotentiale" (Waste Heat Potential) dataset, which contains information about industrial facilities including company names, locations, waste heat sources, temperatures, and flow rates.
+
+## Features
+
+- Clean and standardize column names and text data
+- Calculate energy values from temperature, flow rate, and operating hours
+- Geocode facility addresses to obtain latitude and longitude coordinates
+- Classify waste heat types (Water, Exhaust, Steam, Air, Oil) using AI
+- Generate detailed change logs and warnings for data modifications
+- Export processed data to Excel files for further analysis
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+
+### Prerequisites
+
+- Python 3.8 or higher
+- pip (Python package installer)
+- Git (optional, for cloning the repository)
+
+### Verify Python Installation
+
+Before starting, verify that Python is installed on your system:
+
+**Windows:**
+```bash
+python --version
+```
+
+**Linux/macOS:**
+```bash
+python3 --version
+```
+
+If Python is not installed, download it from [python.org](https://www.python.org/downloads/) or use your system's package manager.
+
+### Setting Up a Virtual Environment
+
+#### Windows (PowerShell/Command Prompt):
+
+```bash
+# Navigate to the project directory
+cd pfa_wasteheat_data_cleaning
+
+# Create a virtual environment
+python -m venv venv
+
+# Activate the virtual environment (PowerShell)
+venv\Scripts\Activate.ps1
+
+# OR for Command Prompt
+venv\Scripts\activate.bat
+```
+
+**Note for Windows users:** If you encounter an execution policy error in PowerShell, run:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+#### Linux:
+
+```bash
+# Navigate to the project directory
+cd pfa_wasteheat_data_cleaning
+
+# Create a virtual environment
+python3 -m venv venv
+
+# Activate the virtual environment
+source venv/bin/activate
+```
+
+**Note for Linux users:** If `python3-venv` is not installed, install it first:
+```bash
+# For Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install python3-venv
+
+# For Fedora/RHEL
+sudo dnf install python3-venv
+
+# For Arch Linux
+sudo pacman -S python
+```
+
+#### macOS:
+
+```bash
+# Navigate to the project directory
+cd pfa_wasteheat_data_cleaning
+
+# Create a virtual environment
+python3 -m venv venv
+
+# Activate the virtual environment
+source venv/bin/activate
+```
+
+**Note for macOS users:** If you don't have Python 3, install it using Homebrew:
+```bash
+brew install python3
+```
+
+### Installing Dependencies
+
+Once your virtual environment is activated (you should see `(venv)` in your terminal prompt), install all required packages:
+
+**All platforms:**
+```bash
+pip install -r requirements.txt
+```
+
+### Deactivating the Virtual Environment
+
+When you're done working, you can deactivate the virtual environment:
+
+**All platforms:**
+```bash
+deactivate
+```
+
+### Required Dependencies
+
+The project uses the following Python packages:
+
+- `pandas` - Data manipulation and analysis
+- `numpy` - Numerical computing
+- `openpyxl` - Excel file reading and writing
+- `geopy` - Geocoding and location services
+- `openai` - LLM integration for waste heat classification
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Running the Main Pipeline
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+To run the complete waste heat analysis pipeline:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```python
+python src/pfa_wasteheat/main.py
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+### Using Individual Components
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+You can also import and use individual components in your own scripts:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```python
+from pfa_wasteheat.data_cleaning import DataCleaner
+from pfa_wasteheat.energy_calculations import EnergyCalculator
+from pfa_wasteheat.wasteheat_analyzer import WasteHeatAnalyzer
+
+# Initialize components
+cleaner = DataCleaner()
+calculator = EnergyCalculator()
+
+# Use them in your workflow
+df_cleaned = cleaner.clean_column_names(df)
+df_with_energy = calculator.add_energy_columns(df_cleaned)
+```
+
+### Input Data Format
+
+The pipeline expects an Excel file with a sheet named "Abwärmepotentiale" containing columns for:
+- Company information (name, location)
+- Address data (street, postal code, city)
+- Waste heat source details
+- Temperature and flow rate measurements
+- Operating hours
+
+## Project Structure
+
+```
+pfa_wasteheat_data_cleaning/
+├── src/
+│   └── pfa_wasteheat/
+│       ├── __init__.py
+│       ├── main.py                          # Main pipeline orchestrator
+│       ├── data_cleaning.py                 # Data cleaning operations
+│       ├── energy_calculations.py           # Energy metric calculations
+│       ├── wasteheat_analyzer.py           # Waste heat analysis
+│       ├── categorization_of_wasteheat.py  # LLM-based classification
+│       ├── geocode.py                       # Geocoding utilities
+│       ├── utils.py                         # Helper functions
+│       ├── app.py                           # Application interface
+│       └── app2.py                          # Alternative interface
+├── requirements.txt                         # Project dependencies
+└── README.md                               # This file
+```
+
+## Authors and Acknowledgment
+
+- **Yusra Senem** (yuesra.senem@dlr.de) - Primary Developer
+- **DLR (Deutsches Zentrum für Luft- und Raumfahrt)** - Project Sponsor
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This project is licensed under the MIT License.
+
+## Project Status
+
+Active development. The project is currently being used for waste heat potential analysis in German industrial facilities.
