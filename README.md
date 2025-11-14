@@ -59,10 +59,7 @@ cd pfa_wasteheat_data_cleaning
 python -m venv venv
 
 # Activate the virtual environment (PowerShell)
-venv\Scripts\Activate.ps1
-
-# OR for Command Prompt
-venv\Scripts\activate.bat
+venv\Scripts\Activate
 ```
 
 **Note for Windows users:** If you encounter an execution policy error in PowerShell, run:
