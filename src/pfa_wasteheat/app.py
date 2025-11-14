@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# File              : app.py
+# License           : License: MIT
+# Author            : Yusra Senem yuesra.senem@dlr.de
+# Date              : 07.08.2025
+
+import streamlit as st
+import pandas as pd
+from main import WasteHeatAnalysisPipeline
+import os
+from wasteheat_analyzer import WasteHeatAnalyzer
+from utils import check_working_hours_limits
+
+
+st.set_page_config(page_title="Waste Heat Analyzer", layout="wide")
+st.title("Waste Heat Data Cleaning & Analysis")
+
+# Automatically load the file
+default_file_path = os.path.join(os.path.dirname(__file__), "pfa_datenpraesentation.xlsx")
+
+if default_file_path:
+    pipeline = WasteHeatAnalysisPipeline(default_file_path)
+    df, raw_df, change_df, warnings, fixed_raw_df = pipeline.run()
+
+    st.success("✅ Data cleaned successfully!")
+
+    # --- Cleaning Summary ---
+    st.subheader("Summary")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Rows Before Cleaning", raw_df.shape[0])
+    col2.metric("Total Rows After Cleaning", df.shape[0]) 
+    col3.metric("Total Changes Logged", change_df.shape[0])
+    col4.metric("Cases Triggered", len(change_df['change_reason'].unique()) if not change_df.empty else 0)
+
+    # --- Warnings ---
+    if warnings:
+        st.subheader("⚠️ Warnings")
+        for w in warnings:
+            st.warning(w)
+
+    # --- Cleaned Data ---
+    st.subheader("Cleaned Data")
+    st.dataframe(df, use_container_width=True)
+    
+
+
+    if not change_df.empty:
+        st.subheader("Changelog")
+        # Group by change_reason, then count the unique indexes in each group
+        case_counts = (
+            change_df.groupby('change_reason')
+            .apply(lambda x: x.index.nunique()) # <-- This is the key change
+            .reset_index(name='count')
+        )
+        # Extract case numbers and sort
+        case_counts['case_num'] = (
+            case_counts['change_reason']
+            .str.extract(r'Case (\d+)', expand=False)
+            .astype(float)
+            .fillna(999)
+        )
+        case_counts_sorted = case_counts.sort_values('case_num')
+        # Build options as 'CaseName (count)'
+        case_options = [f"{row['change_reason']} ({row['count']})" for _, row in case_counts_sorted.iterrows()]
+        selected_case_label = st.selectbox("Filter by change reason", ["All"] + case_options)
+
+        # Map label back to case name
+        if selected_case_label == "All":
+            filtered_change_df = change_df
+            selected_case = "All"
+        else:
+            selected_case = selected_case_label.split(" (")[0]
+            filtered_change_df = change_df[change_df['change_reason'] == selected_case]
+        st.dataframe(filtered_change_df, use_container_width=True)
+
+        # --- Run comparison ---
+        if selected_case == "All":
+            # Comparison after all updates
+            df_final, comparison_results = WasteHeatAnalyzer.compare_energy_values(df, tolerance=0.10)
+            summary_df = WasteHeatAnalyzer.build_comparison_summary(df_final, comparison_results)
+
+        else:
+            # Comparison after only this case applied
+            df_after_case = df.copy()
+            # replace rows in df with updated ones from this case
+            common_cols = [col for col in df_after_case.columns if col in filtered_change_df.columns]
+            df_after_case.loc[filtered_change_df.index, common_cols] = filtered_change_df[common_cols]
+
+
+            df_after_case, comparison_results = WasteHeatAnalyzer.compare_energy_values(df_after_case, tolerance=0.10)
+            summary_df = WasteHeatAnalyzer.build_comparison_summary(df_after_case, comparison_results)
+
+          
+        ##########################################
+
+
+
+    # --- Download Buttons ---
+    st.subheader("📥 Download Cleaned Data")
+
+    @st.cache_data
+    def convert_df_to_csv(df):
+        return df.to_csv(index=False).encode("utf-8")
+
+    st.download_button("Download Cleaned Data", convert_df_to_csv(df), "cleaned_data.csv", "text/csv")
+
+    if not change_df.empty:
+        st.download_button("Download Change Log", convert_df_to_csv(change_df), "change_log.csv", "text/csv")
+    
+    fig = WasteHeatAnalyzer.plot_error_distribution_interactive(df)
+
+    if hasattr(fig, 'show'):  # for plotly figures
+        st.plotly_chart(fig, use_container_width=True)
+    else:  # fallback to matplotlib figures
+        st.pyplot(fig)
+
+    fig2 = WasteHeatAnalyzer.plot_annual_heat_comparison_by_temp(df)
+
+    # df, comparison_results = WasteHeatAnalyzer.compare_energy_values(df)
+    # WasteHeatAnalyzer.display_comparison(df, comparison_results, top_n=20)
+
+    fig3 = WasteHeatAnalyzer.analyze_numeric_correlations(df)
+    
+    violations_df = check_working_hours_limits(df)
+
+    if not violations_df.empty:
+        st.warning(f"⚠ Found {len(violations_df)} rows where Annual_Working_Hours exceed the maximum possible.")
+        st.dataframe(violations_df) # It looks like the foundations are only for the data which Avg. Daily Availability haven't been provided. (664 rows)
+    else:
+        st.success("✅ All Annual_Working_Hours are within limits.")
+
+    # Run classification
+    # classifier = WasteHeatClassifier()
+    # df_classified = classifier.classify_dataframe(df)
+    # df_classified .to_csv("all_classified.csv", index=False)
+
+
+
+    # Show results
+    # st.subheader("Classified Waste Heat Potentials")
+    # st.dataframe(df_classified[["Company_Name", "Waste_Heat_Potential_Name", "label", "confidence"]])
+    # st.subheader("Label Distribution")
+    # st.table(df_classified["label"].value_counts())
+    st.subheader("Baseline Comparison (Before Any Cases Applied)")
+    # Run comparison on the original dataset BEFORE cleaning
+    df_raw, comparison_results_raw = WasteHeatAnalyzer.compare_energy_values(fixed_raw_df.copy(), tolerance=0.10)
+    summary_raw = WasteHeatAnalyzer.build_comparison_summary(df_raw, comparison_results_raw)
+
+    st.write("Comparison summary BEFORE applying any cleaning cases:")
+    st.table(summary_raw)
+
+    #Show comparison between matched and unmatched values of provided and calculated annual heat amounts.
+    df, comparison_results = WasteHeatAnalyzer.compare_energy_values(df, tolerance=0.10)
+    summary_df = WasteHeatAnalyzer.build_comparison_summary(df, comparison_results)
+
+    # Now you can use this in Streamlit
+    st.subheader("Comparing Calculated Annual Energies to Provided Annual Energy (±10% tolerance)")
+    st.table(summary_df)
+    
