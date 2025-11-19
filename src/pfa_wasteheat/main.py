@@ -5,164 +5,121 @@
 # Author            : Yusra Senem yuesra.senem@dlr.de
 # Date              : 02.08.2025
 
+import pandas as pd
+
+# --- Custom Imports ---
 from data_cleaning import DataCleaner
 from energy_calculations import EnergyCalculator
 from wasteheat_analyzer import WasteHeatAnalyzer
-import pandas as pd
 from utils import sanity_check
-from categorization_of_wasteheat import categorize_waste_heat_sample
-from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
-from geopy.exc import GeocoderServiceError, GeocoderTimedOut
-import time
 
-# In main.py (the function "geocode_dataframe" should be placed somewhere else) !! that function "geocode_dataframe" is a function need to be used only once to geocode the dataset and save it to a file.
+# Import the geocoding function from your external file
+from geocode import geocode_dataframe
 
-def geocode_dataframe(df, file_to_save):
-    """
-    Takes a DataFrame, adds lat/long columns, and saves it to a file.
-    """
-    # Initialize the geocoder
-    geolocator = Nominatim(user_agent="pfa_wasteheat_app_ys", timeout=5)
-    
-    # Use RateLimiter to respect the API's 1-request-per-second limit
-    geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1, error_wait_seconds=10)
-
-    print(f"\n--- Starting Geocoding for {len(df)} rows ---")
-    start_time = time.time()
-    
-    # Create the 'full_address' string for the geocoder
-    df['full_address'] = df['Street_and_House_Number'].fillna('') + ', ' + \
-                         df['Postal_Code'].astype(str) + ' ' + \
-                         df['City'].fillna('') + ', Germany'
-
-    # --- Apply the geocode function to each row ---
-    # We use a loop with print statements to show progress
-    locations = []
-    for i, row in df.iterrows():
-        # Print progress every 10 rows
-        if (i + 1) % 10 == 0:
-            print(f"Processing row {i+1}/{len(df)}...")
-            
-        # Handle blank addresses
-        if row['full_address'].strip() == ',':
-            locations.append(None)
-            continue
-            
-        try:
-            locations.append(geocode(row['full_address']))
-        except Exception as e:
-            print(f"Error on row {i}: {e}. Appending None.")
-            locations.append(None)
-
-    # --- Process the results ---
-    df['location'] = locations
-    df['lat'] = df['location'].apply(lambda loc: loc.latitude if loc else None)
-    df['long'] = df['location'].apply(lambda loc: loc.longitude if loc else None)
-
-# --- Save the new DataFrame ---
-    if file_to_save.endswith('.xlsx'):
-        print(f"Saving to Excel file: {file_to_save}")
-        df.to_excel(file_to_save, index=False, engine='openpyxl')
-    else:
-        print(f"Saving to CSV file: {file_to_save}")
-        df.to_csv(file_to_save, index=False)
-    
-    end_time = time.time()
-    duration = (end_time - start_time) / 60 # in minutes
-    found_count = df['lat'].notna().sum()
-    
-    print(f"\n✅ Geocoding complete in {duration:.1f} minutes.")
-    print(f"Found {found_count} of {len(df)} addresses.")
-    print(f"Geocoded sample data saved to {file_to_save}")
-    
-    return df
+# from categorization_of_wasteheat import categorize_waste_heat_sample # Uncomment to use LLM
 
 class WasteHeatAnalysisPipeline:
-    def __init__(self, file_path):
-        self.df = self.load_data(file_path)
-        self.df['Original_Excel_Row'] = self.df.index + 3
+    def __init__(self, input_path=None):
+        """
+        Initialize the pipeline tools. 
+        Data loading is deferred to the run() method to allow Streamlit uploads.
+        """
+        self.input_path = input_path
+        
+        # Initialize tools that don't need data yet
         self.calculator = EnergyCalculator()
         self.cleaner = DataCleaner()
-        self.analyzer = WasteHeatAnalyzer(self.df)
         
+        # Analyzer is stateless, so we can initialize it here
+        self.analyzer = WasteHeatAnalyzer()
 
-    def run(self):
-        # Perform your analysis using self.df
-        print("Running analysis...")
+    @staticmethod
+    def load_data(file_path):
+        """Loads data from a local file path with German formatting."""
+        return pd.read_excel(
+            file_path, 
+            sheet_name='Abwärmepotentiale', 
+            skiprows=1, 
+            decimal=",", 
+            thousands=".", 
+            dtype={'PLZ': str}
+        )
 
-        # Declaring the dataset
-        df = self.df
+    def run(self, df=None, run_geocoding=False):
+        """
+        Runs the full analysis pipeline.
+        Args:
+            df (pd.DataFrame): DataFrame provided by Streamlit. 
+                               If None, loads from self.input_path.
+            run_geocoding (bool): Whether to generate the geocoded sample file.
+        """
+        # --- 1. Logic to determine data source ---
+        if df is None:
+            if self.input_path:
+                print(f"Loading data from path: {self.input_path}")
+                df = self.load_data(self.input_path)
+            else:
+                raise ValueError("Pipeline Error: No DataFrame provided and no input path specified.")
+        
+        # Ensure tracking column exists
+        if 'Original_Excel_Row' not in df.columns:
+            df['Original_Excel_Row'] = df.index + 3
+
+        print("Running analysis pipeline...")
+        
+        # Keep a copy of raw data for comparison later
         raw_df = df.copy()
         
-        
-        # Clean string(object) data in the dataset for titles(column names) and text entities
+        # --- 2. Text Cleaning Phase ---
         df = self.cleaner.clean_column_names(df)
         df = self.cleaner.clean_all_text_features(df)
 
-        # Add calculated energy column and the calculation to the df
-        df =self.calculator.add_energy_columns(df)  
+        # --- 3. Energy Calculation Phase ---
+        df = self.calculator.add_energy_columns(df)  
         
-        # Total Energy Comparisons before any case applied
         print("--- BEFORE applying cases ---")
-        sanity_check(df)
+        # Force recalculation inside sanity_check
+        sanity_check(df) 
         
-        # The raw dataset after cleaning only text features. This dataset will remain untouched for probable usage in comparisons
         fixed_raw_df = df.copy()
 
-        # Clean numerical data in the dataset
+        # --- 4. Numerical Cleaning Phase (Case Logic) ---
         df, change_df, warnings = self.cleaner.apply_case_logic(df)
         
-        # Total Energy Comparisons after all cases applied
         print("--- AFTER applying cases ---")
+        # Force recalculation inside sanity_check
         sanity_check(df)
         
-        # Define how many rows you want
-        sample_size = 100
+        # --- 5. Geocoding Sample (Optional) ---
+        if run_geocoding:
+            sample_size = 100
+            if sample_size > len(df):
+                sample_size = len(df)
 
-        # Make sure you don't ask for more rows than you have
-        if sample_size > len(df):
-            sample_size = len(df)
+            # Create a clean sample for geocoding
+            df_sample = df.sample(n=sample_size, random_state=42).copy()
 
-        # Create the sample DataFrame
-        # random_state ensures you get the same sample each time you run the code (useful for testing)
-        df_sample = df.sample(n=sample_size, random_state=42)
+            print("Running geocoding on sample...")
+            
+            # Call the imported function from geocode.py
+            geocode_dataframe(
+                df_sample, 
+                "data_with_coordinates_SAMPLE.xlsx"
+            )
 
-        # # Call the new function
-        # df_sample_geocoded = geocode_dataframe(
-        #     df, 
-        #     "dataset_with_coordinates_.xlsx"
-        # )
+        # --- 6. LLM Categorization (Optional) ---
+        # if run_categorization:
+        #     categorization_results = categorize_waste_heat_sample(df_sample)
+        #     ... save results ...
 
-        #excel_filename = "all_features_cleaned.xlsx"
-        #df.to_excel(excel_filename, index=False) # index=False avoids writing the pandas index as a column
-        
-        #-----Waste Heat Classification using Blablador LLM -----
-        categorization_results = categorize_waste_heat_sample(df)
-        category_series = pd.Series(categorization_results)
-        df_with_categories = df.copy()
-        df_with_categories['LLM_Category'] = category_series
-
-        excel_filename = "llm_categorization_all_review2.xlsx"
-        try:
-            df_with_categories.to_excel(excel_filename, index=False)
-            print(f"✅ Review sample saved to: {excel_filename}")
-        except Exception as e:
-            print(f"❌ Error saving review file: {e}")
-
-        #-----Waste Heat Classification using Manual Rules -----
-        # classifier = WasteHeatClassifier()
-        # df_sampled_classified = classifier.classify_dataframe(df_sample)
-        # df_sampled_classified.to_excel("manual_cat_sample.xlsx", index=False)
-       
-        return df, raw_df, change_df, warnings, fixed_raw_df#, df_sample#, categorization_results
-    
-    @staticmethod
-    def load_data(file_path):
-        return pd.read_excel(file_path, sheet_name='Abwärmepotentiale', skiprows=1, decimal=",",thousands=".", dtype={'PLZ': str})
+        print("Pipeline run finished.")
+        return df, raw_df, change_df, warnings, fixed_raw_df
 
 if __name__ == "__main__":
-    file_path = 'src/pfa_wasteheat/pfa_datenpraesentation.xlsx'
-    pipeline = WasteHeatAnalysisPipeline(file_path)
-    results = pipeline.run() 
-    # results.to_csv("processed_data.csv", index=False) 
+    # This block handles local testing via 'python main.py'
+    input_path = 'src/pfa_wasteheat/pfa_datenpraesentation.xlsx'
+    
+    pipeline = WasteHeatAnalysisPipeline(input_path)
+    
+    # We call run() without arguments, so it uses the path
+    results = pipeline.run(run_geocoding=False)

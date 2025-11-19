@@ -30,7 +30,7 @@ def load_data(filepath):
         return pd.DataFrame()
 
 # Load your geocoded sample file
-DATA_FILE = "dataset_with_coordinates_.xlsx"
+DATA_FILE = "data/dataset_with_coordinates_.xlsx"
 df = load_data(DATA_FILE)
 
 # --- Streamlit UI ---

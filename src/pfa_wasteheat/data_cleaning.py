@@ -649,6 +649,7 @@ class DataCleaner:
     def apply_case_logic(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply all case-based cleaning logic"""
         calculator = EnergyCalculator()
+        analyzer = WasteHeatAnalyzer()
         # Get power stats for cases 3, 4, 5...
         power_stats = self._get_power_statistics(df)
         # Initialize Annual_Working_Hours column to use in the cases
@@ -792,7 +793,7 @@ class DataCleaner:
         # First, ensure the comparison column is up-to-date
         df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
     
-        df, comparison_results = WasteHeatAnalyzer.compare_energy_values(df, tolerance=0.10)
+        df, comparison_results = analyzer.compare_energy_values(df, tolerance=0.10)
 
         # Get the name of the match column
         match_col_name = comparison_results[0][2]
@@ -825,7 +826,7 @@ class DataCleaner:
         # First, ensure the comparison column is up-to-date
         df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
     
-        df, comparison_results = WasteHeatAnalyzer.compare_energy_values(df, tolerance=0.10)
+        df, comparison_results = analyzer.compare_energy_values(df, tolerance=0.10)
 
         # Get the name of the match column
         match_col_name = comparison_results[0][2]
@@ -859,7 +860,7 @@ class DataCleaner:
         # First, ensure the comparison column is up-to-date
         df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
     
-        df, comparison_results = WasteHeatAnalyzer.compare_energy_values(df, tolerance=0.10)
+        df, comparison_results = analyzer.compare_energy_values(df, tolerance=0.10)
 
         # Get the name of the match column
         match_col_name = comparison_results[0][2]
@@ -1231,7 +1232,7 @@ class DataCleaner:
         # First, ensure the comparison column is up-to-date
         df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
     
-        df, comparison_results = WasteHeatAnalyzer.compare_energy_values(df, tolerance=0.10)
+        df, comparison_results = analyzer.compare_energy_values(df, tolerance=0.10)
 
         # Get the name of the match column
         match_col_name = comparison_results[0][2]
