@@ -14,7 +14,7 @@ API_URL = "https://api.helmholtz-blablador.fz-juelich.de/v1"
 MODEL_NAME = "alias-large"
 
 # --- Define your categories ---
-CATEGORIES = ["Water", "Exhaust", "Steam", "Air", "Oil"]
+CATEGORIES = ["Water", "Exhaust", "Steam", "Air", "Oil", "Refrigerant"]
 
 # --- 1. Helper Function to Extract Category ---
 # We need this again because we are not using pydantic-ai
@@ -40,7 +40,7 @@ client = OpenAI(
 )
 
 # --- 3. Main Categorization Function ---
-def categorize_waste_heat_sample(df_sample: pd.DataFrame) -> dict:
+def categorize_waste_heat(df_sample: pd.DataFrame) -> dict:
     """
     Calls an LLM API to categorize waste heat sources using the OpenAI client.
     """
@@ -59,7 +59,7 @@ def categorize_waste_heat_sample(df_sample: pd.DataFrame) -> dict:
         system_prompt = (
             "You are an expert in industrial processes and waste heat. "
             "Your task is to categorize the source of waste heat based on the input. "
-            "Output ONLY one of the following five categories: Water, Exhaust, Steam, Air, Oil. "
+            "Output ONLY one of the following five categories: Water, Exhaust, Steam, Air, Oil, Refrigerant."
             "Do not add any other words or explanation."
         )
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         "Additional_Info_on_Waste_Heat_Potential": ["Heißes Abgas", "Warmes Wasser"]
     }
     df_test_sample = pd.DataFrame(test_data)
-    results = categorize_waste_heat_sample(df_test_sample)
+    results = categorize_waste_heat(df_test_sample)
     
     print("\n--- Test Results ---")
     print(results)

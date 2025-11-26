@@ -16,7 +16,7 @@ from utils import sanity_check
 # Import the geocoding function from your external file
 from geocode import geocode_dataframe
 
-# from categorization_of_wasteheat import categorize_waste_heat_sample # Uncomment to use LLM
+from categorization_of_wasteheat import categorize_waste_heat # Uncomment to use LLM
 
 class WasteHeatAnalysisPipeline:
     def __init__(self, input_path=None):
@@ -107,10 +107,18 @@ class WasteHeatAnalysisPipeline:
                 "data_with_coordinates_SAMPLE.xlsx"
             )
 
-        # --- 6. LLM Categorization (Optional) ---
-        # if run_categorization:
-        #     categorization_results = categorize_waste_heat_sample(df_sample)
-        #     ... save results ...
+        #-----6. Waste Heat Classification using Blablador LLM -----
+        # categorization_results = categorize_waste_heat(df)
+        # category_series = pd.Series(categorization_results)
+        # df_with_categories = df.copy()
+        # df_with_categories['LLM_Category'] = category_series
+
+        # excel_filename = "data/llm_categorization_all_latest.xlsx"
+        # try:
+        #     df_with_categories.to_excel(excel_filename, index=False)
+        #     print(f"✅ Review sample saved to: {excel_filename}")
+        # except Exception as e:
+        #     print(f"❌ Error saving review file: {e}")
 
         print("Pipeline run finished.")
         return df, raw_df, change_df, warnings, fixed_raw_df

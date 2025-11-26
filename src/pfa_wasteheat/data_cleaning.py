@@ -784,7 +784,7 @@ class DataCleaner:
         power_stats = self._get_power_statistics(df).reset_index(drop=True)
 
         #------------------------------------------------------------------
-    # Case 17 : case_unmatched_mask: Final Correction for Plausible Unmatched Rows
+    # Case unmatched1 : Final Correction for Plausible Unmatched Rows
         # Total Energy Kwh: Yes (but doesn't match)
         # AVG Daily Availability: Yes (>1)
         # Monthly Power: Yes (All >1)
@@ -817,7 +817,7 @@ class DataCleaner:
             df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
             print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched_mask].copy()))
 
-   # Case 18 : case_unmatched2_mask: Final Correction for Plausible Unmatched Rows
+   # Case unmatched2 : Final Correction for Plausible Unmatched Rows
         # Total Energy Kwh: Yes (but doesn't match)
         # AVG Daily Availability: Yes (>1)
         # Monthly Power: Yes (All >1)
@@ -851,7 +851,7 @@ class DataCleaner:
             print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched2_mask].copy()))
             print("Case unmatched Match Check: ", sanity_check(df))
 
-  # Case 19 : case_unmatched3_mask: Final Correction for Plausible Unmatched Rows
+  # Case unmatched3 : Final Correction for Plausible Unmatched Rows
         # Total Energy Kwh: Yes (but doesn't match)
         # AVG Daily Availability: Yes (>1)
         # Monthly Power: Yes (All >1)
@@ -909,6 +909,7 @@ class DataCleaner:
             print("Case7 results:\n", df.loc[case7_mask, cols_to_show])
             df.loc[case7_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case7_mask])
             print("Case7 Match Check: ", sanity_check(df))
+            case7_mask.to_excel("data/case7_mask.xlsx", index=False)
         # Case 8 : Update rows 
         # Total Energy Kwh: No	
         # Max Thermal Power Kw: Yes	
@@ -932,6 +933,7 @@ class DataCleaner:
             print("Case8 results:\n", df.loc[case8_mask, ['Annual_Heat_Amount_kWh_per_Year', 'Annual_Energy_Months']])
             df.loc[case8_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case8_mask])
             print("Case8 Match Check: ", sanity_check(df))
+            case8_mask.to_excel("data/case8_mask.xlsx", index=False)
         # Case 9 : Update rows
         # Total Energy Kwh: No	
         # Max Thermal Power Kw: Yes	
@@ -955,6 +957,7 @@ class DataCleaner:
             print("Case9 results:\n", df.loc[case9_mask, cols_to_show])
             print("Case9 results:\n", df.loc[case9_mask, ['Annual_Heat_Amount_kWh_per_Year', 'Annual_Energy_Months']])
             print("Case9 Match Check: ", sanity_check(df))
+            case9_mask.to_excel("data/case9_mask.xlsx", index=False)
 
         # Case 10 : Update rows
         # Total Energy Kwh: Yes	
@@ -976,6 +979,7 @@ class DataCleaner:
             df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
             print("Case10 results:\n", df.loc[case10_mask, cols_to_show].head(25))
             print("Case10 Match Check: ", sanity_check(df))
+            case10_mask.to_excel("data/case10_mask.xlsx", index=False)
 
 
         # Case 11 : Update rows
@@ -1002,7 +1006,9 @@ class DataCleaner:
             #  Call your check function for working hour limits
             # --- START: New Physical Limit Check ---
             print("\n--- Checking for 24-hour physical limit violations... ---")
-            
+
+            case11_mask.to_excel("data/case11.xlsx", index=False)
+
             # 1. Get a copy of the updated Case 11 data
             df_case11_check = df.loc[case11_mask].copy()
 
@@ -1028,7 +1034,7 @@ class DataCleaner:
             print(f"Case 11 - Max Power = AVG Power: {count_within_tolerance} (out of {case11_mask.sum()} total case rows)")
             # --- End Check ---
             df_11 = df.loc[case11_mask]
-            df_11.to_excel("case11.xlsx", index=False)
+            df_11.to_excel("data/df_11.xlsx", index=False)
 
         # Case 12 : Update rows
         # Total Energy Kwh: Yes	
@@ -1052,6 +1058,7 @@ class DataCleaner:
             df.loc[case12_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case12_mask])
             print("Case12 results:\n", df.loc[case12_mask, cols_to_show])
             print("Case12 Match Check: ", sanity_check(df))
+            case12_mask.to_excel("data/case12_mask.xlsx", index=False)
 
 
         # Case 13 : Update rows
@@ -1080,6 +1087,8 @@ class DataCleaner:
             print("Case13 results:\n", df.loc[case13_mask, cols_to_show])
             df.loc[case13_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case13_mask])
             
+            case13_mask.to_excel("data/case13_mask.xlsx", index=False)
+
             # 1. Get a clean copy of the updated Case 11 data
             #    We use .copy() to avoid a SettingWithCopyWarning
             df_case13_check = df.loc[case13_mask].copy()
@@ -1112,7 +1121,7 @@ class DataCleaner:
             # --- End Check ---
             print("Case13 Match Check: ", sanity_check(df))
             df_13 = df.loc[case13_mask]
-            df_13.to_excel("case13.xlsx", index=False)
+            df_13.to_excel("data/df_13.xlsx", index=False)
 
         # Case 14 : Update rows
         # Total Energy Kwh: Yes	
@@ -1142,6 +1151,9 @@ class DataCleaner:
             df = self._update_avg_daily_availability(df, case14_mask, calculator, case_name='Case 14 Update Rows', reason="AVG daily availability is invalid, updated by (Annual Heat Energy / AVG Thermal Power) / Annual Working Day") # check with "total energy calculated by avg thermal"
             df.loc[case14_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case14_mask])
             print("Case14 results:\n", df.loc[case14_mask, cols_to_show])
+            
+            case14_mask.to_excel("data/case14_mask.xlsx", index=False)
+
             # 1. Get a clean copy of the updated Case 11 data
             #    We use .copy() to avoid a SettingWithCopyWarning
             df_case14_check = df.loc[case14_mask].copy()
@@ -1174,7 +1186,7 @@ class DataCleaner:
             # --- End Check ---
             print("Case14 Match Check: ", sanity_check(df))
             df_14 = df.loc[case14_mask]
-            df_14.to_excel("case14.xlsx", index=False)
+            df_14.to_excel("df_14.xlsx", index=False)
             print("Case14 Match Check: ", sanity_check(df))
         
         # Case 15 : Update rows
@@ -1198,6 +1210,7 @@ class DataCleaner:
             df.loc[case15_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case15_mask])
             print("Case15 results:\n", df.loc[case15_mask, cols_to_show])
             print("Case15 Match Check: ", sanity_check(df))
+            case15_mask.to_excel("data/case15_mask.xlsx", index=False)
 
         # Case 16 : Update rows
         # Total Energy Kwh: Yes	
@@ -1219,11 +1232,12 @@ class DataCleaner:
             df.loc[case16_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case16_mask])
             print("Case16 results:\n", df.loc[case16_mask, cols_to_show])
             print("Case16 Match Check: ", sanity_check(df))
+            case16_mask.to_excel("data/case16_mask.xlsx", index=False)
             
     #------------------------------------------------------------------
 
 
-  # Case 20 : case_unmatched4_mask: Final Correction for Plausible Unmatched Rows
+  # Case unmatched4: Final Correction for Plausible Unmatched Rows
         # Total Energy Kwh: Yes (but doesn't match)
         # AVG Daily Availability: Yes (>1)
         # Monthly Power: Yes (All >1)

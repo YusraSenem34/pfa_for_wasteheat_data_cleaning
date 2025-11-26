@@ -113,15 +113,13 @@ if not df.empty:
     if not df_filtered.empty:
 
         # Prepare table data
-        table_data = df_filtered[
-            ['Company_Name', 'City', 'Annual_Heat_Amount_kWh_per_Year', 'distance_km']
-        ].sort_values('distance_km').reset_index(drop=True)
+        table_data = df_filtered.sort_values('distance_km').reset_index(drop=True)
 
         st.subheader("Select rows to download")
 
         # Selectable table
         event = st.dataframe(
-            df,
+            table_data,
             width="stretch",
             hide_index=True,
             on_select="rerun",             # Enable selection events
@@ -136,7 +134,7 @@ if not df.empty:
             st.write(f"You have selected {len(selected_indices)} rows.")
             
             # Filter the dataframe using the selected indices
-            selected_df = df.iloc[selected_indices]
+            selected_df = table_data.iloc[selected_indices]
 
             csv_data = selected_df.to_csv(index=False).encode("utf-8")
 
