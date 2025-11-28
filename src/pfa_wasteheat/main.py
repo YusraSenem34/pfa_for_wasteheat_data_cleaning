@@ -45,7 +45,7 @@ class WasteHeatAnalysisPipeline:
             dtype={'PLZ': str}
         )
 
-    def run(self, df=None, run_geocoding=False):
+    def run(self, df=None, run_geocoding=True):
         """
         Runs the full analysis pipeline.
         Args:
@@ -92,19 +92,11 @@ class WasteHeatAnalysisPipeline:
         
         # --- 5. Geocoding Sample (Optional) ---
         if run_geocoding:
-            sample_size = 100
-            if sample_size > len(df):
-                sample_size = len(df)
-
-            # Create a clean sample for geocoding
-            df_sample = df.sample(n=sample_size, random_state=42).copy()
-
-            print("Running geocoding on sample...")
-            
-            # Call the imported function from geocode.py
+            print("Generating geocoding sample file...")
+            df_to_geocode = pd.read_excel("data/llm_categorization_all_latest.xlsx")
             geocode_dataframe(
-                df_sample, 
-                "data_with_coordinates_SAMPLE.xlsx"
+                df_to_geocode, 
+                "data/data_with_coordinates_all_latest.xlsx"
             )
 
         #-----6. Waste Heat Classification using Blablador LLM -----
@@ -130,4 +122,4 @@ if __name__ == "__main__":
     pipeline = WasteHeatAnalysisPipeline(input_path)
     
     # We call run() without arguments, so it uses the path
-    results = pipeline.run(run_geocoding=False)
+    results = pipeline.run(run_geocoding=True)
