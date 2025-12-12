@@ -53,8 +53,15 @@ if not df.empty:
         axis=1
     )
     
-    # Filter inside radius
+    # 1. Filter inside radius
     df_filtered = df[df['distance_km'] <= radius_km].copy()
+
+    # 2. Sort and Add IDs IMMEDIATELY (So Map and Table match)
+    if not df_filtered.empty:
+        # Sort by distance
+        df_filtered = df_filtered.sort_values('distance_km').reset_index(drop=True)
+        # Add a sequential ID (1, 2, 3...) column at the start
+        df_filtered.insert(0, 'Map_ID', df_filtered.index + 1)
 
     # --- Map Creation ---
     map_center = [51.1657, 10.4515]  # Germany center
@@ -97,6 +104,7 @@ if not df.empty:
                 fill_color="red",
                 fill_opacity=0.6,
                 popup=folium.Popup(
+                    f"<b>ID: {row['Map_ID']}</b><br>"  # <--- NEW: ID Added Here
                     f"<b>{row['Company_Name']}</b><br>"
                     f"Waste Heat: {heat_german} kWh/a<br>"
                     f"Distance: {dist_german} km",
@@ -112,8 +120,12 @@ if not df.empty:
 
     if not df_filtered.empty:
 
-        # Prepare table data
-        table_data = df_filtered.sort_values('distance_km').reset_index(drop=True)
+        # Select columns to display, making sure Map_ID is first
+        cols_to_show = ['Map_ID', 'Company_Name', 'City', 'Annual_Heat_Amount_kWh_per_Year', 'distance_km']
+        # If your excel has other columns you want, add them to this list
+        
+        # Filter mostly for clean display, but keep the ID
+        table_data = df_filtered[cols_to_show]
 
         st.subheader("Select rows to download")
 
