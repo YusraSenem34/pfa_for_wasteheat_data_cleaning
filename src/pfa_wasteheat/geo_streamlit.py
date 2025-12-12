@@ -104,7 +104,7 @@ if not df.empty:
                 fill_color="red",
                 fill_opacity=0.6,
                 popup=folium.Popup(
-                    f"<b>ID: {row['Map_ID']}</b><br>"  # <--- NEW: ID Added Here
+                    f"<b>ID: {row['Map_ID']}</b><br>"  # ID Added Here
                     f"<b>{row['Company_Name']}</b><br>"
                     f"Waste Heat: {heat_german} kWh/a<br>"
                     f"Distance: {dist_german} km",
@@ -121,11 +121,10 @@ if not df.empty:
     if not df_filtered.empty:
 
         # Select columns to display, making sure Map_ID is first
-        cols_to_show = ['Map_ID', 'Company_Name', 'City', 'Annual_Heat_Amount_kWh_per_Year', 'distance_km']
-        # If your excel has other columns you want, add them to this list
+        #cols_to_show = ['Map_ID', 'Company_Name', 'City', 'Annual_Heat_Amount_kWh_per_Year', 'distance_km']
         
         # Filter mostly for clean display, but keep the ID
-        table_data = df_filtered[cols_to_show]
+        table_data = df_filtered
 
         st.subheader("Select rows to download")
 
