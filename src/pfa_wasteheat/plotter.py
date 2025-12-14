@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.ticker import FuncFormatter
 
-from src.energy_profile_generator.profile import EnergyProfile
+from profile import EnergyProfile
 
 
 def plot_energy_profile(

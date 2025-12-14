@@ -39,8 +39,8 @@ from workalendar.europe import Germany
 
 # Add the project root to the Python path so absolute imports work when run as a script
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from src.energy_profile_generator.profile import EnergyProfile, WasteHeatProfile
-from src.energy_profile_generator.plotter import plot_energy_profile
+from profile import EnergyProfile, WasteHeatProfile
+from plotter import plot_energy_profile
 
 class WasteHeatRecord(BaseModel):
     """Representation of a single waste-heat row from the Hamburg export."""
@@ -346,7 +346,6 @@ def generate_waste_heat_profile(record: WasteHeatRecord, year: int) -> EnergyPro
     # Give the series a descriptive, unique column name for the aggregated CSV
     series_column_name = f"{record.temperature_c}C_{_slugify(record.waste_heat_potential_name, max_length=40)}"
     series = series.rename(series_column_name)
-    all_series.append(series)
 
     # Wrap in EnergyProfile with nested WasteHeatProfile metadata
     working_hours = {
@@ -358,7 +357,7 @@ def generate_waste_heat_profile(record: WasteHeatRecord, year: int) -> EnergyPro
     profile_df = series.to_frame()
     # Calculate aggregated demand (sum of hourly values in kWh)
     aggregated_demand = float(series.sum())  # Already in kW, sum gives kWh
-    
+    holidays_dict, _ = _setup_calendar(year)
     waste_heat_meta = WasteHeatProfile(
         waste_heat_potential_name=record.waste_heat_potential_name,
         temperature_c=record.temperature_c,
@@ -390,7 +389,7 @@ def generate_waste_heat_profile(record: WasteHeatRecord, year: int) -> EnergyPro
 
 
 def generate_waste_heat_profiles(
-    input_csv: Path,
+    input_xlsx: Path,
     output_dir: Path,
     year: int = 2025,
 ) -> Dict[int, Path]:
@@ -398,7 +397,7 @@ def generate_waste_heat_profiles(
     Generate hourly waste-heat profile CSVs for all rows in the input file.
 
     Args:
-        input_csv: Path to the input CSV file
+        input_xlsx: Path to the input_xlsx file
         output_dir: Directory where output files will be saved
         year: Calendar year for which to generate profiles
 
@@ -407,7 +406,7 @@ def generate_waste_heat_profiles(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(input_csv)
+    df = pd.read_excel(input_xlsx)
 
     created_files: Dict[int, Path] = {}
     all_series: list[pd.Series] = []
@@ -426,10 +425,10 @@ def generate_waste_heat_profiles(
         energy_profile = generate_waste_heat_profile(record, year)
 
         # # Calculate working hours from record
-        # start_time, end_time, weekdays, weekend_days = _calculate_working_hours_from_record(record)
+        #start_time, end_time, weekdays, weekend_days = _calculate_working_hours_from_record(record)
 
         # # Build hourly profile
-        # series = _build_hourly_profile(record, year, start_time, end_time)
+        #series = _build_hourly_profile(record, year, start_time, end_time)
 
         # # Give the series a descriptive, unique column name for the aggregated CSV
         # series_column_name = f"{record.temperature_c}C_{_slugify(record.waste_heat_potential_name, max_length=40)}"
@@ -473,6 +472,13 @@ def generate_waste_heat_profiles(
         #     holidays=holidays_dict,
         #     waste_heat=waste_heat_meta,
         # )
+
+        # Extract the series from the profile object we just received
+        if energy_profile.waste_heat and energy_profile.waste_heat.profile_data is not None:
+            # The profile_data DataFrame has one column, we take it as a Series
+            series = energy_profile.waste_heat.profile_data.iloc[:, 0]
+            all_series.append(series)
+
         # Determine CSV and PNG filenames (unique per waste-heat record)
         out_file = output_dir / _default_output_filename(record, year)
         png_name = out_file.with_suffix(".png").name
@@ -489,7 +495,7 @@ def generate_waste_heat_profiles(
     if all_series:
         all_df = pd.concat(all_series, axis=1)
         # Use input file name plus 'series' as requested, stored into the same output directory
-        combined_name = f"{input_csv.stem}_series.csv"
+        combined_name = f"{input_xlsx.stem}_series.csv"
         combined_path = output_dir / combined_name
         all_df.to_csv(combined_path, index_label="")
         print(f"[waste_heat_generator] Combined series CSV saved to '{combined_path.resolve()}'")
@@ -513,11 +519,11 @@ def _parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Iterable[str]] = None) -> None:
     args = _parse_args(argv)
     # Use fixed input and output paths as requested
-    input_csv = Path("Hamburg_wasteheat_export.csv")
+    input_xlsx = Path("data/data_with_coordinates_all_latest.xlsx")
     output_dir = Path("examples")
 
     created = generate_waste_heat_profiles(
-        input_csv=input_csv,
+        input_xlsx=input_xlsx,
         output_dir=output_dir,
         year=args.year,
     )
