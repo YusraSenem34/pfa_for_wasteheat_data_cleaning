@@ -9,7 +9,7 @@ import pandas as pd
 from openai import OpenAI  # Use the standard OpenAI client
 
 # --- LLM API Configuration ---
-API_KEY = "glpat-9HcHBOoCcyM5FDVRDu91cm86MQp1Om12awk.01.0z1wq3pul"
+API_KEY = "glft-LybcFVnFfxpYxziWfUht"
 API_URL = "https://api.helmholtz-blablador.fz-juelich.de/v1"
 MODEL_NAME = "alias-large"
 

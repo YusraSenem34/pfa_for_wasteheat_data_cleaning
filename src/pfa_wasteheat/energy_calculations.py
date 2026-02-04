@@ -8,22 +8,58 @@
 import numpy as np
 import pandas as pd
 from typing import Dict
+import calendar
+from datetime import date
+from workalendar.europe import Germany
 
 class EnergyCalculator:
     """Handles all waste heat energy calculations"""
-    
-    # Constants
-    weekdays_per_month = {
-        'January': 23, 'February': 20, 'March': 23, 'April': 21,
-        'May': 23, 'June': 22, 'July': 23, 'August': 23,
-        'September': 21, 'October': 23, 'November': 22, 'December': 23
-    }
+    def __init__(self, year=2025):
+        # Initialize the dictionaries dynamically
+        self.weekdays_per_month, self.days_per_month = self._generate_calendar_data(year)
+
+    def _generate_calendar_data(self, year):
+        """
+        Generates the 'days_per_month' and 'weekdays_per_month' dictionaries
+        dynamically for the given year using workalendar.
+        """
+        cal = Germany()
+        weekdays_dict = {}
+        days_dict = {}
+
+        # Hardcoded English names to match your existing keys strictly
+        month_names = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ]
+
+        for i, month_name in enumerate(month_names, start=1):
+            # 1. Total Days (handles leap years automatically)
+            # calendar.monthrange returns (start_weekday, num_days)
+            total_days = calendar.monthrange(year, i)[1]
+            days_dict[month_name] = total_days
+
+            # 2. Working Days (Mon-Fri minus Holidays)
+            # We count days that are NOT weekends and NOT holidays
+            working_count = 0
+            for day in range(1, total_days + 1):
+                if cal.is_working_day(date(year, i, day)):
+                    working_count += 1
+            
+            weekdays_dict[month_name] = working_count
+        return weekdays_dict, days_dict
+    # # Constants
+    # weekdays_per_month = {
+    #     'January': 23, 'February': 20, 'March': 23, 'April': 21,
+    #     'May': 23, 'June': 22, 'July': 23, 'August': 23,
+    #     'September': 21, 'October': 23, 'November': 22, 'December': 23
+    # }
         
-    days_per_month = {
-        'January': 31, 'February': 28, 'March': 31, 'April': 30,
-        'May': 31, 'June': 30, 'July': 31, 'August': 31,
-        'September': 30, 'October': 31, 'November': 30, 'December': 31
-    }
+    # days_per_month = {
+    #     'January': 31, 'February': 28, 'March': 31, 'April': 30,
+    #     'May': 31, 'June': 30, 'July': 31, 'August': 31,
+    #     'September': 30, 'October': 31, 'November': 30, 'December': 31
+    # }
         
     power_cols = [
         'Power_Profile_January_kW', 'Power_Profile_February_kW', 'Power_Profile_March_kW',

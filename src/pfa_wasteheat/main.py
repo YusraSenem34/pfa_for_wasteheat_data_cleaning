@@ -45,7 +45,7 @@ class WasteHeatAnalysisPipeline:
             dtype={'PLZ': str}
         )
 
-    def run(self, df=None, run_geocoding=True):
+    def run(self, df=None, run_geocoding=False):
         """
         Runs the full analysis pipeline.
         Args:
@@ -122,4 +122,4 @@ if __name__ == "__main__":
     pipeline = WasteHeatAnalysisPipeline(input_path)
     
     # We call run() without arguments, so it uses the path
-    results = pipeline.run(run_geocoding=True)
+    results = pipeline.run(run_geocoding=False)
