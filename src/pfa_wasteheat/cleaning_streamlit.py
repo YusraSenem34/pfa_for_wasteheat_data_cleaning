@@ -10,7 +10,7 @@ import pandas as pd
 from main import WasteHeatAnalysisPipeline
 import os
 from wasteheat_analyzer import WasteHeatAnalyzer
-from utils import check_working_hours_limits
+from utils import check_working_hours_limits, get_violations_report
 import io # for in-memory file handling in download of excel file
 
 
@@ -41,7 +41,7 @@ if uploaded_file is not None:
         
         # --- 3. Run Pipeline with the Dataframe ---
         # We pass the dataframe we just loaded
-        df, raw_df, change_df, warnings, fixed_raw_df = pipeline.run(df_initial)
+        df, raw_df, change_df, warnings, fixed_raw_df, violations_df = pipeline.run(df_initial)
 
         st.success("✅ Data cleaned successfully!")
 
@@ -163,8 +163,7 @@ if uploaded_file is not None:
         # WasteHeatAnalyzer.display_comparison(df, comparison_results, top_n=20)
 
         fig3 = analyzer.analyze_numeric_correlations(df)
-        
-        violations_df = check_working_hours_limits(df)
+        # Calculate totals once
 
         if not violations_df.empty:
             st.warning(f"⚠ Found {len(violations_df)} rows where Annual_Working_Hours exceed the maximum possible.")
@@ -172,6 +171,29 @@ if uploaded_file is not None:
         else:
             st.success("✅ All Annual_Working_Hours are within limits.")
 
+
+        st.divider()
+        st.subheader("🚩 Full Report: Daily Availability > 24h")
+
+        # Filter for the awkward updates
+        daily_violations = df[df['Avg_Daily_Availability_h'] > 24].copy()
+
+        if not daily_violations.empty:
+            st.error(f"Impossible Daily Limit: {len(daily_violations)} rows detected.")
+            
+            # Passing the whole dataframe displays all columns
+            st.dataframe(daily_violations)
+            
+            # Optional: Add a download button specifically for these "Error" rows
+            # csv = daily_violations.to_csv(index=False).encode('utf-8')
+            # st.download_button(
+            #     label="Download Physical Violations Only",
+            #     data=csv,
+            #     file_name="daily_limit_errors.csv",
+            #     mime="text/csv",
+            # )
+        else:
+            st.success("✅ No physical daily limit violations found in the cleaned data.")
         # Run classification
         # classifier = WasteHeatClassifier()
         # df_classified = classifier.classify_dataframe(df)

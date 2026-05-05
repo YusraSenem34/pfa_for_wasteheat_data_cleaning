@@ -32,16 +32,17 @@ def sanity_check(df, comparison_results=None):
     print("Total Energy Comparisons: ")
     print(summary_df)
 
-def check_working_hours_limits(df, tolerance=0.05):
+def check_working_hours_limits(df, total_days, total_weekdays, tolerance=0.05):
     """
     Check if Annual_Working_Hours exceeds allowed maximum based on daily and weekend availability.
     Weekend_Availability should be boolean: True = works weekends, False = no weekends.
     """
     # Work on a copy to avoid adding helper columns to the main DataFrame
     df_check = df.copy()
-
-    # Determine number of days per year
-    df_check['Days_Per_Year'] = df_check['Weekend_Availability'].apply(lambda x: 365 if x else 261)
+    
+    df_check['Days_Per_Year'] = df_check['Weekend_Availability'].apply(
+        lambda x: total_days if x else total_weekdays
+    )
 
     # Calculate max possible annual working hours
     df_check['Max_Possible_Working_Hours'] = df_check['Avg_Daily_Availability_h'] * df_check['Days_Per_Year']
@@ -56,3 +57,16 @@ def check_working_hours_limits(df, tolerance=0.05):
     ]
 
     return violations
+
+def get_violations_report(df, calculator, tolerance=0.05):
+    """
+    Acts as the bridge:
+    1. Extracts annual day counts from the EnergyCalculator.
+    2. Runs the check_working_hours_limits logic.
+    """
+    # 1. Sum up the calendar data from the calculator object
+    t_days = sum(calculator.days_per_month.values())
+    t_weekdays = sum(calculator.weekdays_per_month.values())
+    
+    # 2. Call your existing function with those values
+    return check_working_hours_limits(df, t_days, t_weekdays, tolerance)

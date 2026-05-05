@@ -84,7 +84,7 @@ class WasteHeatAnalysisPipeline:
         fixed_raw_df = df.copy()
 
         # --- 4. Numerical Cleaning Phase (Case Logic) ---
-        df, change_df, warnings = self.cleaner.apply_case_logic(df)
+        df, change_df, warnings, violations_df = self.cleaner.apply_case_logic(df)
         
         print("--- AFTER applying cases ---")
         # Force recalculation inside sanity_check
@@ -113,7 +113,7 @@ class WasteHeatAnalysisPipeline:
         #     print(f"❌ Error saving review file: {e}")
 
         print("Pipeline run finished.")
-        return df, raw_df, change_df, warnings, fixed_raw_df
+        return df, raw_df, change_df, warnings, fixed_raw_df, violations_df
 
 if __name__ == "__main__":
     # This block handles local testing via 'python main.py'
