@@ -93,8 +93,11 @@ if uploaded_file is not None:
             else:
                 selected_case = selected_case_label.split(" (")[0]
                 filtered_change_df = change_df[change_df['change_reason'] == selected_case]
-            st.dataframe(filtered_change_df, use_container_width=True)
-
+            
+            #st.dataframe(filtered_change_df, use_container_width=True)
+            
+            display_df = filtered_change_df.reset_index().rename(columns={'index': 'Original_Pandas_Row_ID'})
+            st.dataframe(display_df, use_container_width=True)
             # --- Run comparison ---
             if selected_case == "All":
                 # Comparison after all updates
@@ -106,9 +109,17 @@ if uploaded_file is not None:
                 df_after_case = df.copy()
                 # replace rows in df with updated ones from this case
                 common_cols = [col for col in df_after_case.columns if col in filtered_change_df.columns]
-                df_after_case.loc[filtered_change_df.index, common_cols] = filtered_change_df[common_cols]
+
+                # If Row 15 is in here twice, keep only the latest ('last') version of it.
+                #Important: This is because of the Bfee restriction condition in data cleaning which causes second update(deletion) for the same index.
+                math_ready_change_df = filtered_change_df[~filtered_change_df.index.duplicated(keep='last')]
                 
+                # 2. Find only the row indices that STILL EXIST in the final dataset
+                valid_indices = math_ready_change_df.index.intersection(df_after_case.index)
                 
+                # 3. Only run the update if there are surviving rows to update!
+                if not valid_indices.empty:
+                    df_after_case.loc[valid_indices, common_cols] = math_ready_change_df.loc[valid_indices, common_cols]
 
                 df_after_case, comparison_results = analyzer.compare_energy_values(df_after_case, tolerance=0.10)
                 summary_df = analyzer.build_comparison_summary(df_after_case, comparison_results)

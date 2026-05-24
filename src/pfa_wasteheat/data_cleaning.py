@@ -200,7 +200,7 @@ class DataCleaner:
             clean_col = clean_col.str.replace(r'[\r\n\t]+', ' ', regex=True)
             clean_col = clean_col.str.replace(r'\s+', ' ', regex=True)
             clean_col[clean_col.isin(['', 'nan', 'none'])] = pd.NA
-            df[col] = clean_col.str.strip()
+            df['Additional_Info_on_Waste_Heat_Potential'] = clean_col.str.strip()
 
         print("[DataCleaner] All text features have been cleaned.")
         return df
@@ -214,191 +214,68 @@ class DataCleaner:
         'monthly_all_equal': power_df.nunique(axis=1).eq(1),
         'max_monthly_power': power_df.max(axis=1)
     }, index=df.index)
-    def _update_working_hours_from_availability(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
+    
+    def _update_working_hours_from_availability(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> pd.DataFrame:
         """
         Calculate Annual_Working_Hours based on monthly working days
         and Avg_Daily_Availability_h.
         """
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Annual_Working_Hours'] = updated_rows['Annual_Working_Hours']
-
+        if mask.sum() == 0: return df # No rows to update
         df.loc[mask, 'Annual_Working_Hours'] = calculator.calculate_annual_working_hours_from_availability(df[mask])
-        updated_rows['new_Annual_Working_Hours'] = df.loc[mask, 'Annual_Working_Hours']
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows)
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-
-        print(f"[{case_name}] Updated Annual_Working_Hours for {mask.sum()} rows.")
         return df
-    def _update_annual_heat_with_calc_energy(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Annual_Heat_Amount_kWh_per_Year'] = updated_rows['Annual_Heat_Amount_kWh_per_Year'] #for changelog
-
+    
+    def _update_annual_heat_with_calc_energy(self, df: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
+        if mask.sum() == 0: return df # No rows to update
         # Update annual heat amount with calculated annual energy
         df.loc[mask, 'Annual_Heat_Amount_kWh_per_Year'] = EnergyCalculator().calculate_annual_energy(df.loc[mask])
-
-        updated_rows['new_Annual_Heat_Amount_kWh_per_Year'] = df.loc[mask, 'Annual_Heat_Amount_kWh_per_Year']
-        # Tag change reason in both changelog AND dataframe
-        df.loc[mask, 'change_reason'] = case_name
-        updated_rows['change_reason'] = case_name # don't forget to add it for other functions as well.
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-
         return df
 
-    def _update_annual_heat_with_calc_from_power(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df        
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Annual_Heat_Amount_kWh_per_Year'] = updated_rows['Annual_Heat_Amount_kWh_per_Year'] #for changelog
-
+    def _update_annual_heat_with_calc_from_power(self, df: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
+        if mask.sum() == 0: return df        
         # Update annual heat amount with calculated annual energy from thermal power
         df.loc[mask, 'Annual_Heat_Amount_kWh_per_Year'] = EnergyCalculator().calculate_annual_energy_from_thermal_power(df.loc[mask])
-        
-        updated_rows['new_Annual_Heat_Amount_kWh_per_Year'] = df.loc[mask, 'Annual_Heat_Amount_kWh_per_Year']
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-
         return df
    
-    def _update_annual_heat_from_avg_power(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_annual_heat_from_avg_power(self, df: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
         """
         Calculate annual energy using avg thermal power
         Formula: AVG_Thermal_Power × Annual_Working_Hours
         """
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df        
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Annual_Heat_Amount_kWh_per_Year'] = updated_rows['Annual_Heat_Amount_kWh_per_Year'] #for changelog
-
+        if mask.sum() == 0: return df # No rows to update      
         # Update annual heat amount with calculated annual energy from thermal power
         df.loc[mask, 'Annual_Heat_Amount_kWh_per_Year'] = EnergyCalculator().calculate_annual_energy_from_avg_thermal_power(df.loc[mask])
-        
-        updated_rows['new_Annual_Heat_Amount_kWh_per_Year'] = df.loc[mask, 'Annual_Heat_Amount_kWh_per_Year']
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-
         return df
     
-    def _drop_rows(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
-        """Drop rows based on mask and optionally log reason"""
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-        dropped = df[mask].copy() 
-        if not dropped.empty:
-            dropped['change_reason'] = case_name
-            self.changelog.append(dropped) #for changelog
-            print(f"[Drop] {len(dropped)} rows dropped. Reason: {reason}")
-        return df[~mask].copy()
-    
-    def _update_max_power_from_monthly(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_max_power_from_monthly(self, df: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
         """Update Max_Thermal_Power_kW with max of monthly power columns"""
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Max_Thermal_Power_kW'] = updated_rows['Max_Thermal_Power_kW'] #for changelog
-
+        if mask.sum() == 0: return df # No rows to update
         df.loc[mask, 'Max_Thermal_Power_kW'] = df.loc[mask, EnergyCalculator.power_cols].max(axis=1)
-
-        updated_rows['new_Max_Thermal_Power_kW'] = df.loc[mask, 'Max_Thermal_Power_kW']
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-        
         return df
     
-    # def _update_thermal_power_with_calculated_thermal(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
-    #     """
-    #     Update Max_Thermal_Power and monthly power values with calculated thermal power
-    #     """
-    #     if mask.sum() == 0:
-    #         self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-    #         return df
-    #     updated_rows = df[mask].copy()
-    #     for col in EnergyCalculator.power_cols + ['Max_Thermal_Power_kW']:
-    #         updated_rows[f'prev_{col}'] = updated_rows[col] #for changelog
-
-    #     calculated_power = calculator.calculate_max_avg_thermal_power_from_energy(df[mask])
-    #     df.loc[mask, 'Max_Thermal_Power_kW'] = calculated_power
-    #     for col in EnergyCalculator.power_cols:
-    #         df.loc[mask, col] = calculated_power
-
-    #     for col in EnergyCalculator.power_cols + ['Max_Thermal_Power_kW']:
-    #         updated_rows[f'new_{col}'] = df.loc[mask, col]
-    #     updated_rows['change_reason'] = case_name
-    #     self.changelog.append(updated_rows) #for changelog
-    #     print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-
-    #     return df
-    
-    def _update_monthly_power_with_max_power(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_monthly_power_with_max_power(self, df: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
         """Only update monthly power columns with Max_Thermal_Power_kW """
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-        updated_rows = df[mask].copy()
-        for col in EnergyCalculator.power_cols:
-            updated_rows[f'prev_{col}'] = updated_rows[col] #for changelog
-
+        if mask.sum() == 0: return df # No rows to update
         for col in EnergyCalculator.power_cols:
             df.loc[mask, col] = df.loc[mask, 'Max_Thermal_Power_kW']
-
-        for col in EnergyCalculator.power_cols:
-            updated_rows[f'new_{col}'] = df.loc[mask, col]
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-
         return df
     
-    def _update_annual_hours_with_calculated(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_annual_hours_with_calculated(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> pd.DataFrame:
         """
         Calculate annual working hours using:
         Annual_Working_Hours = Annual_Heat_Amount_per_Year_KWh / Max_Thermal_Power_kW
         """
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Annual_Working_Hours'] = updated_rows['Annual_Working_Hours'] #for changelog
-
+        if mask.sum() == 0: return df # No rows to update
         calculated_hours = calculator.calculate_annual_hours_from_energy_and_power(df[mask])
         df.loc[mask, 'Annual_Working_Hours'] = calculated_hours
-        
-        updated_rows['new_Annual_Working_Hours'] = df.loc[mask, 'Annual_Working_Hours']
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-        
         return df
     
-    def _update_avg_daily_availability(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_avg_daily_availability(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> pd.DataFrame:
         """
         Calculate average daily availability (hours).
         Formula: Annual_Working_Hours / Annual Working Days
         """
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
+        if mask.sum() == 0: return df # No rows to update
 
-        # Keep track of the rows being updated
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Avg_Daily_Availability_h'] = updated_rows['Avg_Daily_Availability_h']  # for changelog
-
-        # Use calculator to compute new values
         # Use calculator to compute new values
         calculated_availability_float = calculator.calculate_avg_daily_availability(df[mask])
 
@@ -414,215 +291,129 @@ class DataCleaner:
 
         # Assign the correctly rounded integer value
         df.loc[mask, 'Avg_Daily_Availability_h'] = calculated_availability_int
-
-        # Track changes
-        updated_rows['new_Avg_Daily_Availability_h'] = df.loc[mask, 'Avg_Daily_Availability_h']
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows)
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-    
         return df
 
 
-    def _update_monthly_power_with_avg_thermal_power(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_monthly_power_with_avg_thermal_power(self, df: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
         """Only update monthly power columns with AVG_Thermal_Power """
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-        updated_rows = df[mask].copy()
-        for col in EnergyCalculator.power_cols:
-            updated_rows[f'prev_{col}'] = updated_rows[col] #for changelog
+        if mask.sum() == 0: return df # No rows to update
 
         for col in EnergyCalculator.power_cols:
             df.loc[mask, col] = df.loc[mask, 'AVG_Thermal_Power']
-
-        for col in EnergyCalculator.power_cols:
-            updated_rows[f'new_{col}'] = df.loc[mask, col]
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-
         return df
     
-    def _update_annual_hours_with_avg_power(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_annual_hours_with_avg_power(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> pd.DataFrame:
         """
         Calculate annual working hours using:
         Annual_Working_Hours = Annual_Heat_Amount_per_Year_KWh / AVG_Thermal_Power
         """
-        if mask.sum() == 0:
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-        updated_rows = df[mask].copy()
-        updated_rows['prev_Annual_Working_Hours'] = updated_rows['Annual_Working_Hours'] #for changelog
-
+        if mask.sum() == 0: return df # No rows to update
         calculated_hours = calculator.calculate_annual_hours_from_energy_and_avg_power(df[mask])
-        df.loc[mask, 'Annual_Working_Hours'] = calculated_hours
-        
-        updated_rows['new_Annual_Working_Hours'] = df.loc[mask, 'Annual_Working_Hours']
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows) #for changelog
-        print(f"[Update] {len(updated_rows)} rows Updated. Reason: {reason}")
-        
+        df.loc[mask, 'Annual_Working_Hours'] = calculated_hours  
         return df
     
-    def _apply_power_correction(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
-        """
-        Wrapper function to apply a power correction strategy and handle the changelog.
-        """
-        if not mask.any():
-            self.warnings.append(f"[{case_name}] No rows matched the criteria for correction.")
-            return df
-
-        # Get the subset of rows that will be tested for correction
-        unmatched_df = df[mask].copy()
-        
-        # --- Call the calculation logic from EnergyCalculator ---
-        # This returns a DataFrame with *only* the successfully corrected rows
-        corrected_subset = calculator.correct_powers_watts_to_kw(unmatched_df)
-
-        if corrected_subset.empty:
-            print(f"[{case_name}] No rows were successfully corrected by this logic.")
-            return df
-
-        # --- Handle Changelog and Update Main DataFrame ---
-        matched_indices = corrected_subset.index
-
-        # Create the changelog entry from the original state of the matched rows
-        updated_rows_log = df.loc[matched_indices].copy()
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'prev_{col}'] = updated_rows_log[col]
-
-        # Update the main DataFrame with the corrected values
-        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
-        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
-
-        # Add the new values to the changelog entry
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'new_{col}'] = df.loc[matched_indices, col]
-        updated_rows_log['change_reason'] = case_name
-        self.changelog.append(updated_rows_log)
-
-        print(f"[{case_name}] Successfully updated {len(matched_indices)} rows in the main DataFrame.")
-        
-        return df
-    
-    def _apply_power_correction_strategy2(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
-        if not mask.any(): return df
-        unmatched_df = df[mask].copy()
-        
-        # Call the new calculation function for Strategy 2
-        corrected_subset = calculator.correct_powers_energy_to_power(unmatched_df)
-
-        if corrected_subset.empty:
-            print(f"[{case_name}] No rows were successfully corrected.")
-            return df
-
-        # --- Handle Changelog and Update (this part is the same) ---
-        matched_indices = corrected_subset.index
-        updated_rows_log = df.loc[matched_indices].copy()
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'prev_{col}'] = updated_rows_log[col]
-
-        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
-        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
-
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'new_{col}'] = df.loc[matched_indices, col]
-        updated_rows_log['change_reason'] = case_name
-        self.changelog.append(updated_rows_log)
-
-        print(f"[{case_name}] Successfully updated {len(matched_indices)} rows.")
-        return df
-    
-    def _apply_power_correction_strategy3(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
-        if not mask.any(): return df
-        unmatched_df = df[mask].copy()
-        
-        # Call the new calculation function for Strategy 3
-        corrected_subset = calculator.correct_powers_wh_to_kw(unmatched_df)
-
-        if corrected_subset.empty:
-            print(f"[{case_name}] No rows were successfully corrected.")
-            return df
-
-        # --- Handle Changelog and Update (this part is the same) ---
-        matched_indices = corrected_subset.index
-        updated_rows_log = df.loc[matched_indices].copy()
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'prev_{col}'] = updated_rows_log[col]
-
-        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
-        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
-
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'new_{col}'] = df.loc[matched_indices, col]
-        updated_rows_log['change_reason'] = case_name
-        self.changelog.append(updated_rows_log)
-
-        print(f"[{case_name}] Successfully updated {len(matched_indices)} rows.")
-        return df
-    
-    def _apply_power_correction_strategy4(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
-        if not mask.any(): return df
-        unmatched_df = df[mask].copy()
-        
-        # Call the new calculation function for Strategy 4
-        corrected_subset = calculator.correct_powers_by_scaling_factor(unmatched_df)
-
-        if corrected_subset.empty:
-            print(f"[{case_name}] No rows were successfully corrected.")
-            return df
-
-        # --- Handle Changelog and Update (this part is the same) ---
-        matched_indices = corrected_subset.index
-        updated_rows_log = df.loc[matched_indices].copy()
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'prev_{col}'] = updated_rows_log[col]
-
-        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
-        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
-
-        for col in EnergyCalculator.power_cols:
-            updated_rows_log[f'new_{col}'] = df.loc[matched_indices, col]
-        updated_rows_log['change_reason'] = case_name
-        self.changelog.append(updated_rows_log)
-
-        print(f"[{case_name}] Successfully updated {len(matched_indices)} rows.")
-        return df
-
-    def _update_avg_thermal_power_from_monthly(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator, case_name: str, reason: str = "") -> pd.DataFrame:
+    def _update_avg_thermal_power_from_monthly(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> pd.DataFrame:
         """
         Calculate and update the AVG_Thermal_Power column based on monthly power profiles.
         Formula: (Sum of monthly power values) / 12
         """
-        if not mask.any(): # Use 'not mask.any()' for clarity
-            self.warnings.append(f"[{case_name}] No rows matched — no updates performed.")
-            return df
-
+        if not mask.any(): return df # No rows to update
         # --- Calculation ---
         # Calculate the average power only for the specified subset
         calculated_avg_power = calculator.calculate_avg_thermal_power_by_monthly_powers(df[mask])
-
-        # --- Changelog Preparation ---
-        # Copy the original values *before* updating the DataFrame
-        updated_rows = df[mask].copy()
-        updated_rows['prev_AVG_Thermal_Power'] = updated_rows['AVG_Thermal_Power'] # Store previous value
-
         # --- Update Main DataFrame ---
         # Assign the calculated values to the correct rows in the main DataFrame
         df.loc[mask, 'AVG_Thermal_Power'] = calculated_avg_power
-
-        # --- Finalize Changelog ---
-        # Add the new values and reason to the log entry
-        updated_rows['new_AVG_Thermal_Power'] = df.loc[mask, 'AVG_Thermal_Power'] # Store new value
-        updated_rows['change_reason'] = case_name
-        self.changelog.append(updated_rows)
-
-        print(f"[Update][{case_name}] Updated AVG_Thermal_Power for {mask.sum()} rows. Reason: {reason}")
-        
         return df
+    
+    def _apply_power_correction(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> Tuple[pd.DataFrame, pd.Series]:
+        updated_mask = pd.Series(False, index=df.index)
+        if not mask.any(): return df, updated_mask
+        unmatched_df = df[mask].copy()
+        corrected_subset = calculator.correct_powers_watts_to_kw(unmatched_df)
+        if corrected_subset.empty: return df, updated_mask
+        
+        matched_indices = corrected_subset.index
+        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
+        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
+        updated_mask.loc[matched_indices] = True
+        return df, updated_mask
+    
+    def _apply_power_correction_strategy2(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> Tuple[pd.DataFrame, pd.Series]:
+        updated_mask = pd.Series(False, index=df.index)
+        if not mask.any(): return df, updated_mask
+        unmatched_df = df[mask].copy()
+        corrected_subset = calculator.correct_powers_energy_to_power(unmatched_df)
+        if corrected_subset.empty: return df, updated_mask
+        
+        matched_indices = corrected_subset.index
+        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
+        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
+        updated_mask.loc[matched_indices] = True
+        return df, updated_mask
+    
+    def _apply_power_correction_strategy3(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> Tuple[pd.DataFrame, pd.Series]:
+        updated_mask = pd.Series(False, index=df.index)
+        if not mask.any(): return df, updated_mask
+        unmatched_df = df[mask].copy()
+        corrected_subset = calculator.correct_powers_wh_to_kw(unmatched_df)
+        if corrected_subset.empty: return df, updated_mask
+        
+        matched_indices = corrected_subset.index
+        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
+        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
+        updated_mask.loc[matched_indices] = True
+        return df, updated_mask
+    
+    def _apply_power_correction_strategy4(self, df: pd.DataFrame, mask: pd.Series, calculator: EnergyCalculator) -> Tuple[pd.DataFrame, pd.Series]:
+        updated_mask = pd.Series(False, index=df.index)
+        if not mask.any(): return df, updated_mask
+        unmatched_df = df[mask].copy()
+        corrected_subset = calculator.correct_powers_by_scaling_factor(unmatched_df)
+        if corrected_subset.empty: return df, updated_mask
+        
+        matched_indices = corrected_subset.index
+        df.loc[matched_indices, EnergyCalculator.power_cols] = corrected_subset[EnergyCalculator.power_cols]
+        df.loc[matched_indices, 'Logic_of_Energy_Correction'] = corrected_subset['Logic_of_Energy_Correction']
+        updated_mask.loc[matched_indices] = True
+        return df, updated_mask
+    
+    def _drop_rows(self, df: pd.DataFrame, mask: pd.Series, case_name: str, reason: str = "") -> pd.DataFrame:
+        """Drop rows based on mask and optionally log reason"""
+        if mask.sum() == 0: return df # No rows to drop
+        dropped = df[mask].copy() 
+        if not dropped.empty:
+            dropped['change_reason'] = case_name
+            self.changelog.append(dropped) #for changelog
+            print(f"[Drop] {len(dropped)} rows dropped. Reason: {reason}")
+        return df[~mask].copy()
+    
+    def _log_updated_rows(self, df: pd.DataFrame, mask: pd.Series, rows_before: pd.DataFrame, case_name: str):
+        """Saves a snapshot of the rows, automatically generating prev/new columns for changes."""
+        if mask.sum() == 0:
+            return 
+            
+        updated_rows = df[mask].copy()
+        updated_rows['change_reason'] = case_name
+        
+        # Columns we want to track for prev/new changes
+        cols_to_track = [
+            'Annual_Heat_Amount_kWh_per_Year', 'Max_Thermal_Power_kW', 'AVG_Thermal_Power', 
+            'Avg_Daily_Availability_h', 'Annual_Working_Hours', 'Annual_Energy_Months'
+        ] + EnergyCalculator.power_cols
 
-    #............
+        # Automatically detect changes and append prev_ / new_
+        for col in cols_to_track:
+            if col in updated_rows.columns and col in rows_before.columns:
+                # Compare the before and after series (handling NaNs safely)
+                changed = updated_rows[col].fillna(-9999) != rows_before[col].fillna(-9999)
+                if changed.any():
+                    updated_rows[f'prev_{col}'] = rows_before[col]
+                    updated_rows[f'new_{col}'] = updated_rows[col]
+                    
+        self.changelog.append(updated_rows)
+        
+    #............CASE LOGIC - MAIN BLOCK................#
 
     def apply_case_logic(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply all case-based cleaning logic"""
@@ -633,6 +424,8 @@ class DataCleaner:
         # Initialize Annual_Working_Hours column to use in the cases
         df['Annual_Working_Hours'] = np.nan
         df['AVG_Thermal_Power'] = np.nan
+        df['Update_History'] = "" # New column to track which cases have been applied to each row
+        df['case_resolved'] = False # New column to track if a row has been resolved by any case
         cols_to_show = ["Annual_Heat_Amount_kWh_per_Year",
                         "Max_Thermal_Power_kW",
                         "AVG_Thermal_Power",
@@ -753,8 +546,7 @@ class DataCleaner:
             df = self._drop_rows(df, case6_mask, case_name='Case 6 Invalid Rows', reason="")
             print("Case6 Match Check: ", sanity_check(df))
         
-        df = df.reset_index(drop=True)
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+        power_stats = self._get_power_statistics(df)
 
         #------------------------------------------------------------------
     # Case unmatched1 : Final Correction for Plausible Unmatched Rows
@@ -772,25 +564,27 @@ class DataCleaner:
         match_col_name = comparison_results[0][2]
 
         case_unmatched_mask = (
-            # Condition: Provided and calculated values do not match
             (~df[match_col_name]) &            
-            # Condition: Annual heat, daily availability, and all monthly powers are plausible
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Avg_Daily_Availability_h'] > 1) &
             (power_stats['monthly_any_gt1'])
         )
-        
         if case_unmatched_mask.any():
             df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched_mask].copy()))
             print(f"\n--- Found {case_unmatched_mask.sum()} plausible but unmatched rows for Final Correction ---")
-            df = self._apply_power_correction(df, case_unmatched_mask, calculator, case_name='Case unmatched Correction: W to kW',reason="Correcting monthly power profiles assuming original data was in Watts.")
-            #df.loc[case_unmatched_mask,'AVG_Thermal_Power'] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case_unmatched_mask])
-            #df = self._update_max_power_from_monthly(df, case_unmatched_mask, case_name='Case unmatched Correction: W to kW', reason="Updating Max_Thermal_Power_kW from monthly power columns after correction.")
-            df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched_mask].copy()))
+            
+            # ---> TAKE SNAPSHOT BEFORE CHANGES <---
+            rows_before = df.copy() 
+            
+            df, updated_mask = self._apply_power_correction(df, case_unmatched_mask, calculator)
+            if updated_mask.any():
+                df.loc[updated_mask, 'Update_History'] += "Case Unmatched 1: Corrected W to kW | "
+                df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
+                
+                # ---> PASS ALIGNED SNAPSHOT TO LOGGER <---
+                self._log_updated_rows(df, updated_mask, rows_before.loc[updated_mask], 'Case unmatched Correction: W to kW')
         
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+        power_stats = self._get_power_statistics(df)
 
    # Case unmatched2 : Final Correction for Plausible Unmatched Rows
         # Total Energy Kwh: Yes (but doesn't match)
@@ -807,32 +601,30 @@ class DataCleaner:
         match_col_name = comparison_results[0][2]
 
         case_unmatched2_mask = (
-            # Condition: Provided and calculated values do not match
             (~df[match_col_name]) &            
-            # Condition: Annual heat, daily availability, and all monthly powers are plausible
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Avg_Daily_Availability_h'] > 1) &
             (power_stats['monthly_any_gt1'])
         )
-        
         if case_unmatched2_mask.any():
             df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched2_mask].copy()))
             print(f"\n--- Found {case_unmatched2_mask.sum()} plausible but unmatched rows for Final Correction ---")
-            df = self._apply_power_correction_strategy2(df, case_unmatched2_mask, calculator, case_name='Case unmatched Correction: energy to kW',reason="Correcting monthly power profiles assuming original data was in energy.")
-            #df.loc[case_unmatched2_mask,'AVG_Thermal_Power'] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case_unmatched2_mask])
-            #df = self._update_max_power_from_monthly(df, case_unmatched2_mask, case_name='Case unmatched Correction: energy to kW', reason="Updating Max_Thermal_Power_kW from monthly power columns after correction.")
-            df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched2_mask].copy()))
-            print("Case unmatched Match Check: ", sanity_check(df))
+            
+            rows_before = df.copy()
+            df, updated_mask = self._apply_power_correction_strategy2(df, case_unmatched2_mask, calculator)
+            
+            if updated_mask.any():
+                df.loc[updated_mask, 'Update_History'] += "Case Unmatched 2: Corrected Energy to kW | "
+                df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
+                self._log_updated_rows(df, updated_mask, rows_before.loc[updated_mask], 'Case unmatched Correction: energy to kW')
 
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+        power_stats = self._get_power_statistics(df)
 
   # Case unmatched3 : Final Correction for Plausible Unmatched Rows
-        # Total Energy Kwh: Yes (but doesn't match)
+        # Total Energy Kwh: Yes (but doesn't match) energy in watt to kWh
         # AVG Daily Availability: Yes (>1)
         # Monthly Power: Yes (All >1)
-        # To Do: Attempt to correct monthly powers by assuming they were provided in energy instead of kW.
+        # To Do: Attempt to correct monthly powers by assuming they were provided energy in watt instead of kW.
         
         # First, ensure the comparison column is up-to-date
         df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
@@ -843,26 +635,24 @@ class DataCleaner:
         match_col_name = comparison_results[0][2]
 
         case_unmatched3_mask = (
-            # Condition: Provided and calculated values do not match
             (~df[match_col_name]) &            
-            # Condition: Annual heat, daily availability, and all monthly powers are plausible
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Avg_Daily_Availability_h'] > 1) &
             (power_stats['monthly_any_gt1'])
         )
-        
         if case_unmatched3_mask.any():
             df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched3_mask].copy()))
             print(f"\n--- Found {case_unmatched3_mask.sum()} plausible but unmatched rows for Final Correction ---")
-            df = self._apply_power_correction_strategy3(df, case_unmatched3_mask, calculator, case_name='Case unmatched Correction: energy in watt to kW',reason="Correcting monthly power profiles assuming original data was in energy in watt.")
-            #df.loc[case_unmatched3_mask,'AVG_Thermal_Power'] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case_unmatched3_mask])
-            #df = self._update_max_power_from_monthly(df, case_unmatched3_mask, case_name='Case unmatched Correction: energy in watt to kW', reason="Updating Max_Thermal_Power_kW from monthly power columns after correction.")
-            df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched3_mask].copy()))
-            print("Case unmatched Match Check: ", sanity_check(df))
-        #------------------------------------------------------------------
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+            
+            rows_before = df.copy()
+            df, updated_mask = self._apply_power_correction_strategy3(df, case_unmatched3_mask, calculator)
+            
+            if updated_mask.any():
+                df.loc[updated_mask, 'Update_History'] += "Case Unmatched 3: Corrected Energy (W) to kW | "
+                df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
+                self._log_updated_rows(df, updated_mask, rows_before.loc[updated_mask], 'Case unmatched Correction: energy in watt to kW')
+        
+        power_stats = self._get_power_statistics(df)
 
         # Case 7 : Update Rows 
         # Total Energy Kwh: No	
@@ -872,6 +662,7 @@ class DataCleaner:
         # To Do: Calculate avg thermal power with monthly power values/12. Update the max thermal power as max value of monthly power values
         # calculate total energy by avg thermal power or monthly power values.
         case7_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] <= 1) &
             (df['Max_Thermal_Power_kW'] <= 1) &
             (df['Avg_Daily_Availability_h'] > 1) &             
@@ -879,14 +670,22 @@ class DataCleaner:
             )
         if case7_mask.any():
             print("Case7 results:\n", df.loc[case7_mask, cols_to_show])
+            
+            # ---> TAKE SNAPSHOT BEFORE CHANGES <---
+            rows_before = df[case7_mask].copy()
+            
             df.loc[case7_mask, "AVG_Thermal_Power"] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case7_mask])
-            df = self._update_max_power_from_monthly(df, case7_mask, case_name='Case 7 Update Rows', reason="Max_Thermal_Power_kW is invalid, updated from monthly max") #may check it with max of monthly powers
-            df = self._update_working_hours_from_availability(df, case7_mask, calculator, case_name='Case 7 Update Rows', reason="") #may check it with annual hours calculated by avg thermal power
-            df = self._update_annual_heat_from_avg_power(df, case7_mask, case_name='Case 7 Update Rows', reason="" ) #may check it with annual energy calculated by monthly powers
-            print("Case7 results:\n", df.loc[case7_mask, cols_to_show])
+            df = self._update_max_power_from_monthly(df, case7_mask) 
+            df = self._update_working_hours_from_availability(df, case7_mask, calculator) 
+            df = self._update_annual_heat_from_avg_power(df, case7_mask) 
             df.loc[case7_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case7_mask])
-            print("Case7 Match Check: ", sanity_check(df))
-           # case7_mask.to_excel("data/case7_mask.xlsx", index=False)
+            
+            df.loc[case7_mask, 'Update_History'] += "Case 7: Updated Total Energy | "
+            df.loc[case7_mask, 'case_resolved'] = True
+            # ---> PASS SNAPSHOT TO LOGGER <---
+            self._log_updated_rows(df, case7_mask, rows_before, 'Case 7 Update Rows')
+
+        power_stats = self._get_power_statistics(df)
         # Case 8 : Update rows 
         # Total Energy Kwh: No	
         # Max Thermal Power Kw: Yes	
@@ -895,6 +694,7 @@ class DataCleaner:
         # To Do: Calculate AVG Thermal Power(monthly powers/12) Update total energy based on the AVG thermal power. check with total energy calculated by monthly powers
         # check also if the maxMonth==Max thermal power
         case8_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] <= 1) &
             (df['Max_Thermal_Power_kW'] > 1) &
             (df['Avg_Daily_Availability_h'] > 1) &             
@@ -902,15 +702,19 @@ class DataCleaner:
             )
         if case8_mask.any():
             print("Case8 results:\n", df.loc[case8_mask, cols_to_show])
-            # Calculates ONLY for the subset and assigns back to that same subset
+            rows_before = df[case8_mask].copy()
+            
             df.loc[case8_mask, "AVG_Thermal_Power"] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case8_mask])
-            df = self._update_working_hours_from_availability(df, case8_mask, calculator, case_name='Case 8 Update Rows', reason="Annual_Working_Hours is missing, updated by availability hours") #may check it with annual hours calculated by avg thermal power
-            df = self._update_annual_heat_from_avg_power(df, case8_mask, case_name='Case 8 Update Rows', reason="Annual_Heat_Amount_kWh_per_Year is invalid, updated by AVG power * annual working hours") #may check it with annual energy calculated by monthly powers
-            print("Case8 results:\n", df.loc[case8_mask, cols_to_show])
-            print("Case8 results:\n", df.loc[case8_mask, ['Annual_Heat_Amount_kWh_per_Year', 'Annual_Energy_Months']])
+            df = self._update_working_hours_from_availability(df, case8_mask, calculator) 
+            df = self._update_annual_heat_from_avg_power(df, case8_mask) 
             df.loc[case8_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case8_mask])
-            print("Case8 Match Check: ", sanity_check(df))
-           # case8_mask.to_excel("data/case8_mask.xlsx", index=False)
+            
+            df.loc[case8_mask, 'Update_History'] += "Case 8: Updated Total Energy | "
+            df.loc[case8_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case8_mask, rows_before, 'Case 8 Update Rows')
+
+        power_stats = self._get_power_statistics(df)
+           
         # Case 9 : Update rows
         # Total Energy Kwh: No	
         # Max Thermal Power Kw: Yes	
@@ -918,6 +722,7 @@ class DataCleaner:
         # Monthly Power: No
         # To Do: Update all the monthly power and avg thermal power as max thermal power. update total energy calculated by avg thermal or montly values.
         case9_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] <= 1) &
             (df['Max_Thermal_Power_kW'] > 1) &
             (df['Avg_Daily_Availability_h'] > 1) &             
@@ -925,18 +730,19 @@ class DataCleaner:
             )
         if case9_mask.any():
             print("Case9 results:\n", df.loc[case9_mask, cols_to_show])
-            df = self._update_monthly_power_with_max_power(df, case9_mask, case_name='Case 9 Update Rows', reason="Monthly power values are invalid, updated from Max_Thermal_Power_kW") # check with "total energy calculated by avg thermal"
+            rows_before = df[case9_mask].copy()
+            
+            df = self._update_monthly_power_with_max_power(df, case9_mask) 
             df.loc[case9_mask, "AVG_Thermal_Power"] = df.loc[case9_mask, "Max_Thermal_Power_kW"]
-            df = self._update_working_hours_from_availability(df, case9_mask, calculator, case_name='Case 9 Update Rows', reason="Annual hours are missing, updated from working days * daily availability") # check with "total energy calculated by avg thermal"
-            df = self._update_annual_heat_from_avg_power(df, case9_mask, case_name='Case 9 Update Rows', reason="") # check with "total energy calculated by avg thermal"
-            # I used annual_energy_by_Months because was not sure of AVG thermal because we updated it from max thermal. I should check the comparison between them
+            df = self._update_working_hours_from_availability(df, case9_mask, calculator) 
+            df = self._update_annual_heat_from_avg_power(df, case9_mask) 
             df.loc[case9_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case9_mask])
-            print("Case9 results:\n", df.loc[case9_mask, cols_to_show])
-            print("Case9 results:\n", df.loc[case9_mask, ['Annual_Heat_Amount_kWh_per_Year', 'Annual_Energy_Months']])
-            print("Case9 Match Check: ", sanity_check(df))
-           # case9_mask.to_excel("data/case9_mask.xlsx", index=False)
+            
+            df.loc[case9_mask, 'Update_History'] += "Case 9: Updated Monthly Power | "
+            df.loc[case9_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case9_mask, rows_before, 'Case 9 Update Rows')
 
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+        power_stats = self._get_power_statistics(df)
 
         # Case 10 : Update rows
         # Total Energy Kwh: Yes	
@@ -946,6 +752,7 @@ class DataCleaner:
         # To Do: Calculate the avg thermal power by total energy / hours per year
         # check if avg thermal power == avg of monthly power values
         case10_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Max_Thermal_Power_kW'] > 1) &
             (df['Avg_Daily_Availability_h'] > 1) &             
@@ -953,14 +760,17 @@ class DataCleaner:
             )
         if case10_mask.any():
             print("Case10 results:\n", df.loc[case10_mask, cols_to_show].head(25))
-            df = self._update_working_hours_from_availability(df, case10_mask, calculator, case_name='Case 10 Check-Update', reason="")
+            rows_before = df[case10_mask].copy()
+            
+            df = self._update_working_hours_from_availability(df, case10_mask, calculator)
             df.loc[case10_mask, "AVG_Thermal_Power"] = calculator.calculate_max_avg_thermal_power_from_energy(df[case10_mask]).round(2)
             df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case10 results:\n", df.loc[case10_mask, cols_to_show].head(25))
-            print("Case10 Match Check: ", sanity_check(df))
-         #   case10_mask.to_excel("data/case10_mask.xlsx", index=False)
+            
+            df.loc[case10_mask, 'Update_History'] += "Case 10: Updated Annual Working Hours + AVG Thermal | "
+            df.loc[case10_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case10_mask, rows_before, 'Case 10 Check-Update')
 
-
+        power_stats = self._get_power_statistics(df)
         # Case 11 : Update rows
         # Total Energy Kwh: Yes	
         # Max Thermal Power Kw: Yes	
@@ -969,6 +779,7 @@ class DataCleaner:
         # To Do: calculate avg thermal power. update Avg daily availability: total energy/avg thermal power >yearly max hours?
         # if yes, we will calculate avg thermal power with a different way. before that lets see how many cases we have
         case11_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Max_Thermal_Power_kW'] > 1) &
             (df['Avg_Daily_Availability_h'] <= 1) &             
@@ -976,45 +787,30 @@ class DataCleaner:
             )
         if case11_mask.any():
             print("Case11 results:\n", df.loc[case11_mask, cols_to_show])
-            df = self._update_avg_thermal_power_from_monthly(df, case11_mask, calculator, case_name='Case 11 Update Rows', reason="AVG_Thermal_Power is invalid, updated by monthly power values") # check with "total energy calculated by avg thermal"
-            df = self._update_annual_hours_with_avg_power(df, case11_mask, calculator, case_name='Case 11 Update Rows', reason="Annual_Working_Hours is missing, updated by Annual_Heat_Energy / AVG_Thermal_Power") # check with "total energy calculated by avg thermal"
-            df = self._update_avg_daily_availability(df, case11_mask, calculator, case_name='Case 11 Update Rows', reason="AVG daily availability is invalid, updated by (Annual Heat Energy / AVG Thermal Power) / Annual Working Day") # check with "total energy calculated by avg thermal"
-            df.loc[case11_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case11_mask])
-            print("Case11 results:\n", df.loc[case11_mask, cols_to_show])
-            print("Case11 Match Check: ", sanity_check(df))
-            #  Call your check function for working hour limits
-            # --- START: New Physical Limit Check ---
-            print("\n--- Checking for 24-hour physical limit violations... ---")
-
-         #   case11_mask.to_excel("data/case11.xlsx", index=False)
-
-            # 1. Get a copy of the updated Case 11 data
-            df_case11_check = df.loc[case11_mask].copy()
-
-            # 2. Find rows where the new Avg_Daily_Availability_h exceeds 24
-            violations_mask = df_case11_check['Avg_Daily_Availability_h'] > 24
+            rows_before = df[case11_mask].copy()
             
-            # 3. Print the results
+            df = self._update_avg_thermal_power_from_monthly(df, case11_mask, calculator) 
+            df = self._update_annual_hours_with_avg_power(df, case11_mask, calculator) 
+            df = self._update_avg_daily_availability(df, case11_mask, calculator) 
+            df.loc[case11_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case11_mask])
+            
+            df.loc[case11_mask, 'Update_History'] += "Case 11: Updated AVG Daily Availability| "
+            df.loc[case11_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case11_mask, rows_before, 'Case 11 Update Rows')
+            
+            # --- Physical Limit Check ---
+            df_case11_check = df.loc[case11_mask].copy()
+            violations_mask = df_case11_check['Avg_Daily_Availability_h'] > 24
             if violations_mask.any():
                 violations_df = df_case11_check[violations_mask]
                 print(f"WARNING: Found {len(violations_df)} rows where calculated 'Avg_Daily_Availability_h' exceeds 24 hours.")
-                print(violations_df[['Annual_Heat_Amount_kWh_per_Year', 'AVG_Thermal_Power', 'Annual_Working_Hours', 'Avg_Daily_Availability_h']])
-            else:
-                print("OK: All calculated 'Avg_Daily_Availability_h' values are within the 24-hour physical limit.")
-            # --- END: New Check ---
-            # --- Corrected Case-Dependent for max thermal == avg thermal Check ---
-            # Get the subset of data for only this case
+            
             avg_power_subset = df.loc[case11_mask, 'AVG_Thermal_Power']
             max_power_subset = df.loc[case11_mask, 'Max_Thermal_Power_kW']
-
-            # Perform the check only on that subset
             count_within_tolerance = np.isclose(avg_power_subset, max_power_subset, rtol=0.03).sum()
-            
             print(f"Case 11 - Max Power = AVG Power: {count_within_tolerance} (out of {case11_mask.sum()} total case rows)")
-            # --- End Check ---
-            # df_11 = df.loc[case11_mask]
-            # df_11.to_excel("data/df_11.xlsx", index=False)
 
+        power_stats = self._get_power_statistics(df)
         # Case 12 : Update rows
         # Total Energy Kwh: Yes	
         # Max Thermal Power Kw: No	
@@ -1023,6 +819,7 @@ class DataCleaner:
         # To Do: Calculate AVG thermal power. Total energy/hours per year. Is this the same result with monthly power values/12 If yes, great
         # If no, we will pursued a different case
         case12_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Max_Thermal_Power_kW'] <= 1) &
             (df['Avg_Daily_Availability_h'] > 1) &             
@@ -1030,15 +827,18 @@ class DataCleaner:
             )
         if case12_mask.any():
             print("Case12 results:\n", df.loc[case12_mask, cols_to_show])
-            df = self._update_working_hours_from_availability(df, case12_mask, calculator, case_name='Case 12 Update Rows', reason="")
-            df = self._update_max_power_from_monthly(df, case12_mask, case_name='Case 12 Update Rows', reason="Updating Max_Thermal_Power_kW from max of monthly power values.")
-            print("Case12 results:\n", df.loc[case12_mask, cols_to_show])
+            rows_before = df[case12_mask].copy()
+            
+            df = self._update_working_hours_from_availability(df, case12_mask, calculator)
+            df = self._update_max_power_from_monthly(df, case12_mask) 
             df.loc[case12_mask, "AVG_Thermal_Power"]= calculator.calculate_avg_thermal_power_by_monthly_powers(df[case12_mask])
             df.loc[case12_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case12_mask])
-            print("Case12 results:\n", df.loc[case12_mask, cols_to_show])
-            print("Case12 Match Check: ", sanity_check(df))
-          #  case12_mask.to_excel("data/case12_mask.xlsx", index=False)
-
+            
+            df.loc[case12_mask, 'Update_History'] += "Case 12: Updated Max Thermal Power | "
+            df.loc[case12_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case12_mask, rows_before, 'Case 12 Update Rows')
+            
+        power_stats = self._get_power_statistics(df)
 
         # Case 13 : Update rows
         # Total Energy Kwh: Yes	
@@ -1048,6 +848,7 @@ class DataCleaner:
         # To Do: Calculate avg thermal power with Total energy/hours per year. Update all monthly power values with avg thermal power.
         # for how many cases max thermal power==avg thermal power
         case13_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Max_Thermal_Power_kW'] > 1) &
             (df['Avg_Daily_Availability_h'] > 1) &             
@@ -1055,54 +856,29 @@ class DataCleaner:
             )
         if case13_mask.any():
             print("Case13 results:\n", df.loc[case13_mask, cols_to_show])
-            # --- ADD THIS VERIFICATION STEP ---
-            # Check how many of the 217 rows were already matched
-            pre_update_matches = df.loc[case13_mask, 'Match_Annual_Energy_Months'].sum()
-            print(f"VERIFICATION: {pre_update_matches} of these {case13_mask.sum()} rows were already 'Matched'.")
-            # --- END VERIFICATION ---
-            df = self._update_working_hours_from_availability(df, case13_mask, calculator, case_name='Case 13 Update Rows', reason="Annual_Working_Hours is missing, updated by working days * daily availability") # max and avg power are the same so i can use that function
+            rows_before = df[case13_mask].copy()
+            
+            df = self._update_working_hours_from_availability(df, case13_mask, calculator) 
             df.loc[case13_mask, "AVG_Thermal_Power"] = calculator.calculate_max_avg_thermal_power_from_energy(df[case13_mask])
-            df = self._update_monthly_power_with_avg_thermal_power(df, case13_mask, case_name='Case 13 Update Rows', reason="Monthly power values are invalid, updated by AVG_Thermal_Power") # check with "total energy calculated by avg thermal"
-            print("Case13 results:\n", df.loc[case13_mask, cols_to_show])
+            df = self._update_monthly_power_with_avg_thermal_power(df, case13_mask) 
             df.loc[case13_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case13_mask])
             
-          #  case13_mask.to_excel("data/case13_mask.xlsx", index=False)
+            df.loc[case13_mask, 'Update_History'] += "Case 13: Updated Monthly Power | "
+            df.loc[case13_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case13_mask, rows_before, 'Case 13 Update Rows')
 
-            # 1. Get a clean copy of the updated Case 11 data
-            #    We use .copy() to avoid a SettingWithCopyWarning
             df_case13_check = df.loc[case13_mask].copy()
-
-            # 2. Prepare the 'Weekend_Availability' column as required by your function
-            #    (Converts "Ja"/"Nein" strings to True/False)
             df_case13_check['Weekend_Availability'] = df_case13_check['Weekend_Availability'].str.lower() == 'ja'
-            
-            # 3. Call your check function
             violations_df = get_violations_report(df_case13_check, calculator)
-            
-            # 4. Print the results to the console
             if not violations_df.empty:
                 print(f"WARNING: Found {len(violations_df)} rows where 'Annual_Working_Hours' exceeds the max possible.")
-                # Print the key columns from the violations
-                print(violations_df[['Annual_Working_Hours', 'Max_Possible_Working_Hours', 'Avg_Daily_Availability_h', 'Days_Per_Year']])
-            else:
-                print("OK: No working hour violations found for this case.")
-            # --- END: New Code ---
-                        # --- END: New Check ---
-            # --- Corrected Case-Dependent for max thermal == avg thermal Check ---
-            # Get the subset of data for only this case
+            
             avg_power_subset = df.loc[case13_mask, 'AVG_Thermal_Power']
             max_power_subset = df.loc[case13_mask, 'Max_Thermal_Power_kW']
-
-            # Perform the check only on that subset
             count_within_tolerance = np.isclose(avg_power_subset, max_power_subset, rtol=0.03).sum()
-            
             print(f"Case 13 - Max Power = AVG Power: {count_within_tolerance} (out of {case13_mask.sum()} total case rows)")
-            # --- End Check ---
-            print("Case13 Match Check: ", sanity_check(df))
-            # df_13 = df.loc[case13_mask]
-            # df_13.to_excel("data/df_13.xlsx", index=False)
 
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+        power_stats = self._get_power_statistics(df)
 
         # Case 14 : Update rows
         # Total Energy Kwh: Yes	
@@ -1114,6 +890,7 @@ class DataCleaner:
         # avg daily availability should be int not float. We can check it later. 
         # Again time > yearly hours ? then we will decide it.
         case14_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Max_Thermal_Power_kW'] > 1) &
             (df['Avg_Daily_Availability_h'] <= 1) &             
@@ -1121,55 +898,25 @@ class DataCleaner:
             )
         if case14_mask.any():
             print("Case14 results:\n", df.loc[case14_mask, cols_to_show])
-                        # --- ADD THIS VERIFICATION STEP ---
-            # Check how many of the 19 rows were already matched
-            pre_update_matches = df.loc[case14_mask, 'Match_Annual_Energy_Months'].sum()
-            print(f"VERIFICATION: {pre_update_matches} of these {case14_mask.sum()} rows were already 'Matched'.")
-            # --- END VERIFICATION ---
+            rows_before = df[case14_mask].copy()
+            
             df.loc[case14_mask, "AVG_Thermal_Power"] = df.loc[case14_mask, "Max_Thermal_Power_kW"]
-            df = self._update_monthly_power_with_max_power(df, case14_mask, case_name='Case 14 Update Rows', reason="Monthly power values are invalid, updated by Max_Thermal_Power_kW") # max and avg power are the same so i can use that function
-            df = self._update_annual_hours_with_calculated(df, case14_mask, calculator, case_name='Case 14 Update Rows', reason="Annual working hours is missing, updated by Annual_Heat_Amount_per_Year_KWh / Max_Thermal_Power_kW ") # max and avg power are the same so i can use that function
-            df = self._update_avg_daily_availability(df, case14_mask, calculator, case_name='Case 14 Update Rows', reason="AVG daily availability is invalid, updated by (Annual Heat Energy / AVG Thermal Power) / Annual Working Day") # check with "total energy calculated by avg thermal"
+            df = self._update_monthly_power_with_max_power(df, case14_mask) 
+            df = self._update_annual_hours_with_calculated(df, case14_mask, calculator) 
+            df = self._update_avg_daily_availability(df, case14_mask, calculator) 
             df.loc[case14_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case14_mask])
-            print("Case14 results:\n", df.loc[case14_mask, cols_to_show])
             
-         #   case14_mask.to_excel("data/case14_mask.xlsx", index=False)
+            df.loc[case14_mask, 'Update_History'] += "Case 14: Updated Monthly Power + AVG Daily Availability | "
+            df.loc[case14_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case14_mask, rows_before, 'Case 14 Update Rows')
 
-            # 1. Get a clean copy of the updated Case 11 data
-            #    We use .copy() to avoid a SettingWithCopyWarning
             df_case14_check = df.loc[case14_mask].copy()
-
-            # 2. Prepare the 'Weekend_Availability' column as required by your function
-            #    (Converts "Ja"/"Nein" strings to True/False)
             df_case14_check['Weekend_Availability'] = df_case14_check['Weekend_Availability'].str.lower() == 'ja'
-            
-            # 3. Call your check function
             violations_df = get_violations_report(df_case14_check, calculator)
-
-            # 4. Print the results to the console
             if not violations_df.empty:
                 print(f"WARNING: Found {len(violations_df)} rows where 'Annual_Working_Hours' exceeds the max possible.")
-                # Print the key columns from the violations
-                print(violations_df[['Annual_Working_Hours', 'Max_Possible_Working_Hours', 'Avg_Daily_Availability_h', 'Days_Per_Year']])
-            else:
-                print("OK: No working hour violations found for this case.")
-            # --- END: New Code ---
-                        # --- END: New Check ---
-            # --- Corrected Case-Dependent for max thermal == avg thermal Check ---
-            # Get the subset of data for only this case
-            # avg_power_subset = df.loc[case14_mask, 'AVG_Thermal_Power']
-            # max_power_subset = df.loc[case14_mask, 'Max_Thermal_Power_kW']
-
-            # # Perform the check only on that subset
-            # count_within_tolerance = np.isclose(avg_power_subset, max_power_subset, rtol=0.03).sum()
-            
-            # print(f"Case 14 - Max Power = AVG Power: {count_within_tolerance} (out of {case14_mask.sum()} total case rows)")
-            # --- End Check ---
-            print("Case14 Match Check: ", sanity_check(df))
-            # df_14 = df.loc[case14_mask]
-            # df_14.to_excel("df_14.xlsx", index=False)
         
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+        power_stats = self._get_power_statistics(df)
 
         # Case 15 : Update rows
         # Total Energy Kwh: Yes	
@@ -1178,6 +925,7 @@ class DataCleaner:
         # Monthly Power: No
         # To Do: Calculate avg thermal power by total energy/hours per year. Update max thermal power and monthly values as avg thermal power
         case15_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Max_Thermal_Power_kW'] <= 1) &
             (df['Avg_Daily_Availability_h'] > 1) &             
@@ -1185,16 +933,19 @@ class DataCleaner:
             )
         if case15_mask.any():
             print("Case15 results:\n", df.loc[case15_mask, cols_to_show])
-            df = self._update_working_hours_from_availability(df, case15_mask, calculator, case_name='Case 15 Update Rows', reason="Annual_Working_Hours is missing, updated by working days * daily availability") # max and avg power are the same so i can use that function
+            rows_before = df[case15_mask].copy()
+            
+            df = self._update_working_hours_from_availability(df, case15_mask, calculator) 
             df.loc[case15_mask, "AVG_Thermal_Power"] = calculator.calculate_max_avg_thermal_power_from_energy(df[case15_mask])
             df.loc[case15_mask, "Max_Thermal_Power_kW"] = df.loc[case15_mask, "AVG_Thermal_Power"]
-            df = self._update_monthly_power_with_avg_thermal_power(df, case15_mask, case_name='Case 15 Update Rows', reason="Monthly power values are invalid, updated by AVG_Thermal_Power") # check with "total energy calculated by avg thermal"
+            df = self._update_monthly_power_with_avg_thermal_power(df, case15_mask) 
             df.loc[case15_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case15_mask])
-            print("Case15 results:\n", df.loc[case15_mask, cols_to_show])
-            print("Case15 Match Check: ", sanity_check(df))
-         #   case15_mask.to_excel("data/case15_mask.xlsx", index=False)
+            
+            df.loc[case15_mask, 'Update_History'] += "Case 15: Updated Monthly Power + MAX Thermal Power| "
+            df.loc[case15_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case15_mask, rows_before, 'Case 15 Update Rows')
         
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+        power_stats = self._get_power_statistics(df)
 
         # Case 16 : Update rows
         # Total Energy Kwh: Yes	
@@ -1203,6 +954,7 @@ class DataCleaner:
         # Monthly Power: Yes
         # To Do: Calculate avg thermal power with monthly power/12. yearly hours is total energy/avg thermal power and then find and update the avg daily availablity. check data type of avg daily availability
         case16_mask =(
+            (~df['case_resolved']) &
             (df['Annual_Heat_Amount_kWh_per_Year'] > 1) &
             (df['Max_Thermal_Power_kW'] <= 1) &
             (df['Avg_Daily_Availability_h'] <= 1) &             
@@ -1210,14 +962,18 @@ class DataCleaner:
             )
         if case16_mask.any():
             print("Case16 results:\n", df.loc[case16_mask, cols_to_show])
-            df.loc[case16_mask, "AVG_Thermal_Power"] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case16_mask])
-            df = self._update_annual_hours_with_avg_power(df, case16_mask, calculator, case_name='Case 16 Update Rows', reason="Annual_Working_Hours is missing, updated by Annual_Heat_Amount_per_Year_KWh / AVG_Thermal_Power") # check with "total energy calculated by avg thermal"
-            df = self._update_avg_daily_availability(df, case16_mask, calculator, case_name='Case 16 Update Rows', reason="AVG daily availability is invalid, updated by (Annual Heat Energy / AVG Thermal Power) / Annual Working Day") # check with "total energy calculated by avg thermal"
-            df.loc[case16_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case16_mask])
-            print("Case16 results:\n", df.loc[case16_mask, cols_to_show])
-            print("Case16 Match Check: ", sanity_check(df))
-        #    case16_mask.to_excel("data/case16_mask.xlsx", index=False)
+            rows_before = df[case16_mask].copy()
             
+            df.loc[case16_mask, "AVG_Thermal_Power"] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case16_mask])
+            df = self._update_annual_hours_with_avg_power(df, case16_mask, calculator) 
+            df = self._update_avg_daily_availability(df, case16_mask, calculator) 
+            df.loc[case16_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case16_mask])
+            
+            df.loc[case16_mask, 'Update_History'] += "Case 16: Updated AVG Daily Availability + MAX Thermal Power | "
+            df.loc[case15_mask, 'case_resolved'] = True
+            self._log_updated_rows(df, case16_mask, rows_before, 'Case 16 Update Rows')
+            
+        power_stats = self._get_power_statistics(df)  
     #------------------------------------------------------------------
 
 
@@ -1246,16 +1002,41 @@ class DataCleaner:
         
         if case_unmatched4_mask.any():
             df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched4_mask].copy()))
             print(f"\n--- Found {case_unmatched4_mask.sum()} plausible but unmatched rows for Final Correction ---")
-            df = self._apply_power_correction_strategy4(df, case_unmatched4_mask, calculator, case_name='Case unmatched Correction: scaling factor of energy',reason="Correcting monthly power profiles by scaling factor of the energies.")
-            #df.loc[case_unmatched4_mask,'AVG_Thermal_Power'] = calculator.calculate_avg_thermal_power_by_monthly_powers(df[case_unmatched4_mask])
-            #df = self._update_max_power_from_monthly(df, case_unmatched4_mask, case_name='Case unmatched Correction: scaling factor of energy', reason="Updating Max_Thermal_Power_kW from monthly power columns after correction.")
-            df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
-            print("Case unmatched Match Check: ", sanity_check(df.loc[case_unmatched4_mask].copy()))
-            print("Case unmatched Match Check: ", sanity_check(df))
-    #------------------------------------------------------------------
-        power_stats = self._get_power_statistics(df).reset_index(drop=True)
+            
+            rows_before = df.copy()
+            df, updated_mask = self._apply_power_correction_strategy4(df, case_unmatched4_mask, calculator)
+            
+            if updated_mask.any():
+                df.loc[updated_mask, 'Update_History'] += "Case Unmatched 4: Corrected by scaling factor | "
+                df['Annual_Energy_Months'] = calculator.calculate_annual_energy(df)
+                self._log_updated_rows(df, updated_mask, rows_before.loc[updated_mask], 'Case unmatched Correction: scaling factor of energy')
+        
+        power_stats = self._get_power_statistics(df)
+        
+        # ─── BfEE Step 1: Plant-Level Filter ───────────────────────────────────────
+        # Remove entries below ANY of the three plant-level thresholds (OR logic).
+        # Regulation from PFA: < 200 MWh/a (200.000 kWh/a)  OR  < 1,500 h/year  OR  avg temp < 25°C
+        bfee_plant_mask = (
+            (df['Annual_Heat_Amount_kWh_per_Year'] < 200000) | # kWh/a
+            (df['Annual_Working_Hours'] < 1500)              |
+            (df['Avg_Temperature_Level_C'] < 25)
+        )
+        if bfee_plant_mask.any():
+            print(f"BfEE Plant Filter: removing {bfee_plant_mask.sum()} entries below plant-level threshold.")
+            df = self._drop_rows(df, bfee_plant_mask, case_name='BfEE Plant-Level Filter', reason='Entry below plant-level threshold (< 200 MWh/a, < 1500 h/year, or < 25°C)')
+
+        # ─── BfEE Step 2: Site-Level Filter ────────────────────────────────────────
+        # After plant filter, group by Site_Name and remove entire sites
+        # whose total waste heat is below 800 MWh/a. (800.000 kWh/a)
+        # Note: reset index first so groupby aligns correctly after previous drops.
+        
+        site_totals = df.groupby('Site_Name')['Annual_Heat_Amount_kWh_per_Year'].transform('sum')
+        bfee_site_mask = site_totals < 800000
+        if bfee_site_mask.any():
+            print(f"BfEE Site Filter: removing {bfee_site_mask.sum()} entries from sites below 800 MWh/a total.")
+            df = self._drop_rows(df, bfee_site_mask, case_name='BfEE Site-Level Filter', reason='Site total waste heat below 800 MWh/a threshold')
+        
         violations_df = get_violations_report(df, calculator)
 
 
