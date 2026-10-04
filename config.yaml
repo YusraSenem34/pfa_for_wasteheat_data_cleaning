@@ -1,0 +1,49 @@
+# Configuration for the PfA waste heat cleaning pipeline.
+# Every number that changes results lives here, so each run is documented
+# and sensitivity analyses (e.g. tolerance 0.05 / 0.10 / 0.20) are one edit away.
+
+paths:
+  raw_file: data/raw/pfa_datenpraesentation.xlsx
+  raw_sheet: Abwärmepotentiale
+  output_dir: data/processed
+
+# Calendar year used for days per month, working days and public holidays.
+# The register published in 2025 most likely describes 2024 operation - confirm
+# with the supervisor and change here if needed.
+calendar_year: 2025
+
+# A value counts as "reported" (present) only if it is above these limits.
+# Values at or below them are treated as missing (placeholders such as 0 or 1).
+presence:
+  annual_kwh_min: 1        # Annual_Heat_Amount_kWh_per_Year
+  max_power_kw_min: 1      # Max_Thermal_Power_kW
+  monthly_kw_min: 1        # at least one month above this -> profile reported
+  daily_hours_min: 0       # Avg_Daily_Availability_h (1 h/day is a valid value)
+
+consistency:
+  # Relative tolerance for "reported annual energy == recalculated annual energy".
+  tolerance: 0.10
+  # Which readings of the monthly columns are tested (see consistency.py).
+  interpretations: [A, B, C, W, Wh]
+  # What to do when no reading fits:
+  #   trust_annual  -> keep reported annual energy, rescale the monthly shape to it
+  #   trust_profile -> keep the monthly values (reading A), replace annual energy
+  unmatched_strategy: trust_annual
+
+plausibility:
+  temperature_min_c: 10     # below: implausible as waste heat
+  temperature_max_c: 1200   # above: implausible for reported industrial sources
+  # Relative tolerance when comparing against physical limits (8760 h, 24 h/day, Pmax).
+  limit_tolerance: 0.05
+
+# BfEE de-minimis thresholds (Merkblatt PfA). Rows are only FLAGGED, never removed.
+bfee_thresholds:
+  plant_min_annual_kwh: 200000     # 200 MWh/a per waste heat source
+  plant_min_hours: 1500            # operating hours per year
+  plant_min_temperature_c: 25
+  site_min_annual_kwh: 800000      # 800 MWh/a per site
+
+llm_medium:
+  api_url: https://api.helmholtz-blablador.fz-juelich.de/v1
+  model: alias-large
+  api_key_env: BLABLADOR_API_KEY   # the key itself is NEVER stored in the repo

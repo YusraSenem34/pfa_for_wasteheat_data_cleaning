@@ -1,210 +1,146 @@
-# PFA Waste Heat Data Cleaning
+# PfA Waste Heat Data Cleaning
 
-A Python-based data analysis pipeline for cleaning, processing, and analyzing waste heat potential data from industrial facilities in Germany. This project is part of the DLR (Deutsches Zentrum für Luft- und Raumfahrt) energy profile research initiative.
+Cleaning and quality flagging of the German *Plattform für Abwärme* (PfA) register
+of industrial waste heat potentials (§ 17 EnEfG). Part of a Master's thesis at
+BHT Berlin in cooperation with DLR.
 
-## Description
+**Principle: the pipeline never deletes a row and never overwrites a reported value.**
+Raw columns stay exactly as published. Cleaned values go into new `*_clean`
+columns, every decision is recorded in a flag column, and each row gets a
+quality tier. Which rows to use is decided later, in the modelling step, and can
+be varied for sensitivity analyses.
 
-This project provides a comprehensive pipeline for processing waste heat data from industrial sites. It includes:
-
-- **Data Cleaning**: Automated cleaning of textual and numerical data from Excel datasets
-- **Energy Calculations**: Computation of energy metrics based on temperature, flow rate, and operating hours
-- **Geocoding**: Integration with geopy to geocode facility addresses and obtain coordinates
-- **Waste Heat Classification**: Automated categorization of waste heat sources using LLM (Blablador) and manual rule-based approaches
-- **Data Validation**: Sanity checks and consistency validation throughout the pipeline
-
-The pipeline processes data from the "Abwärmepotentiale" (Waste Heat Potential) dataset, which contains information about industrial facilities including company names, locations, waste heat sources, temperatures, and flow rates.
-
-## Features
-
-- Clean and standardize column names and text data
-- Calculate energy values from temperature, flow rate, and operating hours
-- Geocode facility addresses to obtain latitude and longitude coordinates
-- Classify waste heat types (Water, Exhaust, Steam, Air, Oil) using AI
-- Generate detailed change logs and warnings for data modifications
-- Export processed data to Excel files for further analysis
-
-## Installation
-
-### Prerequisites
-
-- Python 3.8 or higher
-- pip (Python package installer)
-- Git (optional, for cloning the repository)
-
-### Verify Python Installation
-
-Before starting, verify that Python is installed on your system:
-
-**Windows:**
-```bash
-python --version
-```
-
-**Linux/macOS:**
-```bash
-python3 --version
-```
-
-If Python is not installed, download it from [python.org](https://www.python.org/downloads/) or use your system's package manager.
-
-### Setting Up a Virtual Environment
-
-#### Windows (PowerShell/Command Prompt):
+## Quick start
 
 ```bash
-# Navigate to the project directory
-cd pfa_wasteheat_data_cleaning
-
-# Create a virtual environment
 python -m venv venv
-
-# Activate the virtual environment (PowerShell)
-venv\Scripts\Activate
-```
-
-**Note for Windows users:** If you encounter an execution policy error in PowerShell, run:
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-#### Linux:
-
-```bash
-# Navigate to the project directory
-cd pfa_wasteheat_data_cleaning
-
-# Create a virtual environment
-python3 -m venv venv
-
-# Activate the virtual environment
-source venv/bin/activate
-```
-
-**Note for Linux users:** If `python3-venv` is not installed, install it first:
-```bash
-# For Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install python3-venv
-
-# For Fedora/RHEL
-sudo dnf install python3-venv
-
-# For Arch Linux
-sudo pacman -S python
-```
-
-#### macOS:
-
-```bash
-# Navigate to the project directory
-cd pfa_wasteheat_data_cleaning
-
-# Create a virtual environment
-python3 -m venv venv
-
-# Activate the virtual environment
-source venv/bin/activate
-```
-
-**Note for macOS users:** If you don't have Python 3, install it using Homebrew:
-```bash
-brew install python3
-```
-
-### Installing Dependencies
-
-Once your virtual environment is activated (you should see `(venv)` in your terminal prompt), install all required packages:
-
-**All platforms:**
-```bash
+source venv/bin/activate                 # Windows: venv\Scripts\Activate
 pip install -r requirements.txt
+pip install -e .                         # makes `pfa_wasteheat` importable
+
+python -m pfa_wasteheat.pipeline         # -> data/processed/pfa_cleaned.{parquet,xlsx}
+                                         #    + data/processed/cleaning_summary.md
+pytest                                   # run the tests
 ```
 
-### Deactivating the Virtual Environment
+Optional enrichment (needs internet / API key):
 
-When you're done working, you can deactivate the virtual environment:
-
-**All platforms:**
 ```bash
-deactivate
+# Coordinates: re-use the old geocoding results, then geocode only what is missing
+python -m pfa_wasteheat.enrich.geocode --legacy data/data_with_coordinates_all_latest.xlsx
+
+# Medium (Water, Exhaust, Steam, ...) via LLM - key from the environment, never from the code
+export BLABLADOR_API_KEY=...             # PowerShell: $env:BLABLADOR_API_KEY="..."
+python -m pfa_wasteheat.enrich.medium_llm --limit 50
 ```
 
-### Required Dependencies
+Apps:
 
-The project uses the following Python packages:
-
-- `pandas` - Data manipulation and analysis
-- `numpy` - Numerical computing
-- `openpyxl` - Excel file reading and writing
-- `geopy` - Geocoding and location services
-- `openai` - LLM integration for waste heat classification
-
-## Usage
-
-### Running the Main Pipeline
-
-To run the complete waste heat analysis pipeline:
-
-```python
-python src/pfa_wasteheat/main.py
+```bash
+streamlit run apps/cleaning_app.py       # flags, tiers, tolerance slider, downloads
+streamlit run apps/geo_app.py            # map, radius search, hourly profiles
 ```
 
-### Using Individual Components
+All settings (calendar year, tolerances, thresholds, paths) are in `config.yaml`.
 
-You can also import and use individual components in your own scripts:
+## Pipeline steps
 
-```python
-from pfa_wasteheat.data_cleaning import DataCleaner
-from pfa_wasteheat.energy_calculations import EnergyCalculator
-from pfa_wasteheat.wasteheat_analyzer import WasteHeatAnalyzer
+| Step | Module | What it does |
+|---|---|---|
+| 1 | `loading.py` | Read the Excel export, English column names, drop contact data, add `row_id` |
+| 2 | `text_cleaning.py` | Normalise addresses/names, parse control options, build `company_id` and `site_id` |
+| 3 | `consistency.py` | Which fields are reported; test **all** readings of the monthly columns against the annual energy |
+| 4 | `imputation.py` | Build the `*_clean` values; fill missing fields and record where each value came from |
+| 5 | `plausibility.py` | Physical limits, duplicates, BfEE thresholds (flag only) |
+| 6 | `quality.py` | Combine flags into a quality tier A-D |
+| 7 | `reporting.py` | Summary tables (also written to `cleaning_summary.md`) |
 
-# Initialize components
-cleaner = DataCleaner()
-calculator = EnergyCalculator()
+### Readings of the monthly columns
 
-# Use them in your workflow
-df_cleaned = cleaner.clean_column_names(df)
-df_with_energy = calculator.add_energy_columns(df_cleaned)
+The register asks for monthly "power profiles in kW", but reporters filled them in
+differently. Every reading is converted to monthly **energy** (kWh) and compared
+with the reported annual energy (tolerance in `config.yaml`, default ±10 %):
+
+| Reading | Meaning | Monthly energy |
+|---|---|---|
+| A | kW while the source is available | value × daily hours × available days |
+| B | kW averaged over the whole month | value × 24 h × days in month |
+| C | monthly energy in kWh | value |
+| W | W instead of kW | value / 1000 × daily hours × available days |
+| Wh | monthly energy in Wh | value / 1000 |
+
+The closest reading wins, but A or B (unit as reported) is preferred whenever it fits.
+If nothing fits, the shape of the closest reading is rescaled to the reported annual
+energy (`unmatched_strategy: trust_annual`) and the row is flagged `was_rescaled`.
+
+### Quality tiers
+
+| Tier | Meaning |
+|---|---|
+| **A** | Annual energy and monthly profile agree as reported (reading A or B), nothing filled in |
+| **B** | Agree after an explained unit fix (C, W, Wh) |
+| **C** | Usable, but rescaled or partly filled in |
+| **D** | Not usable as a target: no energy information, physically impossible, or exact duplicate |
+
+### Main output columns
+
+| Column | Meaning |
+|---|---|
+| `annual_kwh_clean`, `energy_<Month>_kwh_clean` | Clean annual / monthly energy; the 12 months always add up to the annual value |
+| `share_<Month>` | Monthly energy / annual energy (profile shape) |
+| `max_power_kw_clean`, `daily_hours_clean`, `annual_operating_hours_clean`, `full_load_hours` | Clean power and time values |
+| `*_source` | `reported`, `derived`, `from_monthly:…`, `rescaled:…`, `flat_…` - where a value came from |
+| `consistency_status` | `consistent_as_reported` / `consistent_after_unit_fix` / `inconsistent` / `not_testable` |
+| `interp_best`, `interp_ratio`, `ratio_A` … `ratio_Wh` | Best reading and reported ÷ recalculated annual energy per reading |
+| `interp_ambiguous` | More than one *different* reading fits |
+| `was_rescaled`, `scale_factor`, `was_imputed`, `imputed_fields` | What was changed |
+| `peak_monthly_kw` | Highest monthly power while available (before the final adjustment) |
+| `is_flat_profile_raw`, `is_flat_profile_clean` | All 12 monthly values identical (as reported / after filling in) |
+| `temp_implausible`, `temp_range_mismatch` | Temperature outside a plausible range / outside its own category |
+| `pmax_below_monthly`, `flh_impossible`, `flh_exceeds_availability`, `daily_hours_impossible` | Physical contradictions |
+| `is_duplicate_exact`, `is_duplicate_name`, `duplicate_group` | Duplicates |
+| `below_200mwh`, `below_1500h`, `below_25c`, `below_plant_threshold`, `below_site_threshold`, `below_bfee_threshold` | BfEE de-minimis thresholds - flagged, **not** removed |
+| `quality_tier`, `quality_reasons` | Final tier and why |
+
+## Project structure
+
+```
+config.yaml                    all settings
+data/raw/                      the published Excel export
+data/processed/                generated outputs (not in git)
+src/pfa_wasteheat/
+  pipeline.py                  run everything: python -m pfa_wasteheat.pipeline
+  loading.py  text_cleaning.py  consistency.py  imputation.py
+  plausibility.py  quality.py  reporting.py  energy.py  columns.py  config.py
+  enrich/geocode.py            Nominatim geocoding with cache
+  enrich/medium_llm.py         LLM classification of the heat medium
+  profiles/hourly.py           hourly (8760 h) profile per row, energy-conserving
+  profiles/models.py, plotting.py
+apps/cleaning_app.py, geo_app.py
+tests/
 ```
 
-### Input Data Format
+## Changes compared with the first version (branch `main`)
 
-The pipeline expects an Excel file with a sheet named "Abwärmepotentiale" containing columns for:
-- Company information (name, location)
-- Address data (street, postal code, city)
-- Waste heat source details
-- Temperature and flow rate measurements
-- Operating hours
+- No rows are deleted. Former deletions (cases 1-6, BfEE filters) are now flags / tier D.
+- Raw values are never overwritten; cleaned values live in `*_clean` columns.
+- All readings of the monthly columns are tested per row and the best one is chosen
+  (before: the first fitting unit fix won, and reading B was not tested).
+- The forced scaling to the annual energy is recorded (`was_rescaled`, `scale_factor`)
+  and lowers the quality tier instead of counting as a match.
+- Cases 1-16 replaced by one rule table (`imputation.py`); daily hours are no longer rounded.
+- Site threshold uses company + site + postal code (before: site name only, which merged
+  different companies' sites such as "Werk 1").
+- Bug fixes: case 16 marked case-15 rows as resolved; missing text became the string "Nan";
+  the profile generator read the temperature from `AVG_Thermal_Power` and used 8760 h in leap years.
+- API key removed from the code (read from `BLABLADOR_API_KEY`).
+- Cleaning core no longer imports Streamlit/plotting; settings in `config.yaml`; logging instead of print; tests added.
 
-## Project Structure
+## Authors
 
-```
-pfa_wasteheat_data_cleaning/
-├── src/
-│   └── pfa_wasteheat/
-│       ├── __init__.py
-│       ├── main.py                          # Main pipeline orchestrator
-│       ├── data_cleaning.py                 # Data cleaning operations
-│       ├── energy_calculations.py           # Energy metric calculations
-│       ├── wasteheat_analyzer.py           # Waste heat analysis
-│       ├── categorization_of_wasteheat.py  # LLM-based classification
-│       ├── geocode.py                       # Geocoding utilities
-│       ├── utils.py                         # Helper functions
-│       ├── app.py                           # Application interface
-│       └── app2.py                          # Alternative interface
-├── requirements.txt                         # Project dependencies
-└── README.md                               # This file
-```
-
-## Authors and Acknowledgment
-
-- **Yusra Senem** (yuesra.senem@dlr.de) - Primary Developer
-- **DLR (Deutsches Zentrum für Luft- und Raumfahrt)** - Project Sponsor
+- **Yusra Senem** (yuesra.senem@dlr.de) - primary developer
+- DLR (Deutsches Zentrum für Luft- und Raumfahrt) - project sponsor
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Project Status
-
-Active development. The project is currently being used for waste heat potential analysis in German industrial facilities.
+MIT

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pfa-wasteheat"
+version = "0.2.0"
+description = "Cleaning and quality flagging of the German PfA industrial waste heat register"
+requires-python = ">=3.10"
+authors = [{ name = "Yusra Senem", email = "yuesra.senem@dlr.de" }]
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

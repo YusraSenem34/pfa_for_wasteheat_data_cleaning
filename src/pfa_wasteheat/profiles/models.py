@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# File              : profile.py
-# License           : License: 
+# File              : models.py (was profile.py)
+# License           : MIT
 # Author            : Konstantinos Papanikandros
-# Date              : MIT
+# Date              :
 
 import os
 import datetime

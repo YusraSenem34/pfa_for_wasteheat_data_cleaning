@@ -1,1 +1,16 @@
-venv
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+
+# Excel lock files
+~$*
+
+# Secrets
+.env
+
+# Generated outputs (re-create with: python -m pfa_wasteheat.pipeline)
+data/processed/
