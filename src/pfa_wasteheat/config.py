@@ -39,6 +39,8 @@ class Plausibility:
     temperature_min_c: float = 10
     temperature_max_c: float = 1200
     limit_tolerance: float = 0.05
+    pmax_far_above_factor: float = 100
+    estimate_tolerance: float = 0.01
 
 
 @dataclass

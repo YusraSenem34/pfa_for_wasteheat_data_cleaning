@@ -10,6 +10,9 @@ columns, every decision is recorded in a flag column, and each row gets a
 quality tier. Which rows to use is decided later, in the modelling step, and can
 be varied for sensitivity analyses.
 
+**What every flag and tier means, why it is set, and how the old cases 1-16 map to the
+new rules: [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md).**
+
 ## Quick start
 
 ```bash
@@ -82,25 +85,20 @@ energy (`unmatched_strategy: trust_annual`) and the row is flagged `was_rescaled
 | **C** | Usable, but rescaled or partly filled in |
 | **D** | Not usable as a target: no energy information, physically impossible, or exact duplicate |
 
-### Main output columns
+### Output columns
 
-| Column | Meaning |
+| Column group | Examples |
 |---|---|
-| `annual_kwh_clean`, `energy_<Month>_kwh_clean` | Clean annual / monthly energy; the 12 months always add up to the annual value |
-| `share_<Month>` | Monthly energy / annual energy (profile shape) |
-| `max_power_kw_clean`, `daily_hours_clean`, `annual_operating_hours_clean`, `full_load_hours` | Clean power and time values |
-| `*_source` | `reported`, `derived`, `from_monthly:…`, `rescaled:…`, `flat_…` - where a value came from |
-| `consistency_status` | `consistent_as_reported` / `consistent_after_unit_fix` / `inconsistent` / `not_testable` |
-| `interp_best`, `interp_ratio`, `ratio_A` … `ratio_Wh` | Best reading and reported ÷ recalculated annual energy per reading |
-| `interp_ambiguous` | More than one *different* reading fits |
-| `was_rescaled`, `scale_factor`, `was_imputed`, `imputed_fields` | What was changed |
-| `peak_monthly_kw` | Highest monthly power while available (before the final adjustment) |
-| `is_flat_profile_raw`, `is_flat_profile_clean` | All 12 monthly values identical (as reported / after filling in) |
-| `temp_implausible`, `temp_range_mismatch` | Temperature outside a plausible range / outside its own category |
-| `pmax_below_monthly`, `flh_impossible`, `flh_exceeds_availability`, `daily_hours_impossible` | Physical contradictions |
-| `is_duplicate_exact`, `is_duplicate_name`, `duplicate_group` | Duplicates |
-| `below_200mwh`, `below_1500h`, `below_25c`, `below_plant_threshold`, `below_site_threshold`, `below_bfee_threshold` | BfEE de-minimis thresholds - flagged, **not** removed |
-| `quality_tier`, `quality_reasons` | Final tier and why |
+| Raw (unchanged) | `Annual_Heat_Amount_kWh_per_Year`, `Power_Profile_<Month>_kW`, ... |
+| Identifiers | `row_id`, `Original_Excel_Row`, `company_id`, `site_id` |
+| Clean values | `annual_kwh_clean`, `energy_<Month>_kwh_clean`, `share_<Month>`, `max_power_kw_clean`, `daily_hours_clean`, `full_load_hours` |
+| Where a value came from | `monthly_source`, `annual_source`, `max_power_source`, `daily_hours_source`, `imputed_fields` |
+| Consistency | `consistency_status`, `interp_best`, `interp_ratio`, `ratio_A` ... `ratio_Wh` |
+| Flags (True/False) | 27 flags - see [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md#7-flag-reference) |
+| Result | `quality_tier`, `quality_reasons` |
+
+Flag and tier definitions live in `src/pfa_wasteheat/definitions.py`. After changing them, run
+`python -m pfa_wasteheat.definitions` to update the documentation (a test checks that it is current).
 
 ## Project structure
 
@@ -112,11 +110,13 @@ src/pfa_wasteheat/
   pipeline.py                  run everything: python -m pfa_wasteheat.pipeline
   loading.py  text_cleaning.py  consistency.py  imputation.py
   plausibility.py  quality.py  reporting.py  energy.py  columns.py  config.py
+  definitions.py               meaning of every flag and tier (single source of truth)
   enrich/geocode.py            Nominatim geocoding with cache
   enrich/medium_llm.py         LLM classification of the heat medium
   profiles/hourly.py           hourly (8760 h) profile per row, energy-conserving
   profiles/models.py, plotting.py
 apps/cleaning_app.py, geo_app.py
+docs/DATA_QUALITY.md           how the cleaning works, flag and tier reference
 tests/
 ```
 

@@ -1,13 +1,7 @@
-"""Combine all flags into one quality tier per row.
+"""Combine all flags into one quality tier per row (A, B, C, D).
 
-    A  consistent as reported: annual energy and monthly profile agree in the reported unit,
-       nothing filled in, nothing physically impossible
-    B  consistent after an explained unit fix (monthly kWh, W or Wh instead of kW)
-    C  usable, but values were rescaled or filled in
-    D  not usable as a model target: no energy information, physically impossible,
-       or an exact duplicate of an earlier row
-
-Flags that do not change the tier (e.g. pmax_below_monthly, temp_range_mismatch,
+Which flags lead to tier C or D is defined in definitions.py (Flag.tier), together
+with the meaning of every tier. Flags without a tier effect (e.g. pmax_below_monthly,
 below_bfee_threshold) stay available as separate columns for sensitivity analyses.
 """
 
@@ -18,11 +12,12 @@ import logging
 import numpy as np
 import pandas as pd
 
+from .definitions import flags_for_tier
+
 log = logging.getLogger(__name__)
 
-TIER_D_FLAGS = ["no_energy_info", "temp_implausible", "flh_impossible",
-                "daily_hours_impossible", "is_duplicate_exact"]
-TIER_C_FLAGS = ["was_rescaled", "was_imputed"]
+TIER_D_FLAGS = flags_for_tier("D")
+TIER_C_FLAGS = flags_for_tier("C")
 
 
 def assign_quality_tier(df: pd.DataFrame) -> pd.DataFrame:

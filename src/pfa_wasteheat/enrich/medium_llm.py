@@ -87,7 +87,7 @@ def classify_medium(df: pd.DataFrame, cfg: Config, sleep_s: float = 0.0) -> pd.D
 def import_legacy_labels(df: pd.DataFrame, legacy_file: str | Path) -> pd.DataFrame:
     """Re-use labels from the old pipeline (old prompt!), matched by the original Excel row."""
     old = pd.read_excel(legacy_file, usecols=[C.EXCEL_ROW, "LLM_Category"]).drop_duplicates(C.EXCEL_ROW)
-    out = df[[C.ROW_ID, C.EXCEL_ROW]].merge(old, on=C.EXCEL_ROW, how="left")
+    out = df[[C.ROW_ID, C.EXCEL_ROW, C.SOURCE_NAME]].merge(old, on=C.EXCEL_ROW, how="left")
     out["LLM_Raw_Reply"] = None
     out["LLM_Model"] = "legacy (old prompt, 6 categories, no Unclear)"
     return out.drop(columns=[C.EXCEL_ROW])
@@ -109,12 +109,14 @@ def main(argv=None) -> None:
         labels = import_legacy_labels(df, args.legacy)
         labels.to_parquet(out, index=False)
         log.info("Saved %s: %s", out, labels["LLM_Category"].value_counts(dropna=False).to_dict())
+        log.info("Re-run the pipeline to add the medium flags.")
         return
     if args.limit:
         df = df.head(args.limit)
     labels = classify_medium(df, cfg)
-    pd.concat([df[[C.ROW_ID]], labels], axis=1).to_parquet(out, index=False)
+    pd.concat([df[[C.ROW_ID, C.SOURCE_NAME]], labels], axis=1).to_parquet(out, index=False)
     log.info("Saved %s: %s", out, labels["LLM_Category"].value_counts().to_dict())
+    log.info("Re-run the pipeline to add the medium flags.")
 
 
 if __name__ == "__main__":

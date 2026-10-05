@@ -17,7 +17,9 @@ the same rules depending on which fields were reported:
 Finally, the monthly energies of every row are scaled to add up exactly to its clean
 annual energy (for fitting rows this is a correction within the tolerance).
 
-Max power and daily hours are kept when reported and derived otherwise.
+Daily hours are kept when reported; otherwise derived as annual / (max power x available
+days) if max power is reported, else assumed to be 24 h on the available days.
+Max power is kept when reported; otherwise the highest monthly power while available.
 Nothing is deleted, and every filled-in value is marked in *_source / was_imputed.
 """
 
@@ -33,7 +35,7 @@ from . import columns as C
 from .config import Config
 from .energy import (
     INTERPRETATIONS, available_days, available_hours, flat_monthly_energy,
-    full_month_hours, monthly_energy,
+    monthly_energy,
 )
 
 log = logging.getLogger(__name__)
@@ -131,7 +133,28 @@ def build_clean_values(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     # Invariant: the 12 monthly energies always add up to the clean annual energy.
     # For rows that fit (case 1) this is a small adjustment within the tolerance
     # (the deviation is kept in interp_ratio); monthly shares are not affected.
-    op_hours = np.where(has_d[:, None], available_hours(d_raw, weekend, year), full_month_hours(year)[None, :])
+    total = energy.sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        adjust = np.where(np.isfinite(annual) & (total > 0), annual / total, 1.0)
+    energy_before_adjust = energy
+    energy = energy * adjust[:, None]
+
+    df["no_energy_info"] = ~np.isfinite(annual)
+    days_per_year = available_days(weekend, year).sum(axis=1)
+
+    # --- Daily hours: reported, else derived ---
+    #   max power reported -> annual / (max power x available days)   (full-load hours per day)
+    #   otherwise          -> 24 h: the source is assumed to run continuously on its available days
+    with np.errstate(divide="ignore", invalid="ignore"):
+        from_pmax = annual / (p_raw * days_per_year)
+    derived_daily = np.where(has_p, from_pmax, np.where(np.isfinite(annual), 24.0, np.nan))
+    daily = np.where(has_d, d_raw, derived_daily)
+    daily_src = np.where(has_d, "reported",
+                         np.where(~np.isfinite(derived_daily), "none",
+                                  np.where(has_p, "derived_from_max_power", "assumed_24h")))
+
+    # Hours per month in which the source is available (uses the clean daily hours).
+    op_hours = available_hours(daily, weekend, year)
 
     def peak_kw(e):
         with np.errstate(divide="ignore", invalid="ignore"), warnings.catch_warnings():
@@ -139,34 +162,13 @@ def build_clean_values(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
             return np.nanmax(np.where(op_hours > 0, e / op_hours, np.nan), axis=1)
 
     # Highest monthly power while available, from the monthly values BEFORE the final
-    # adjustment below - used by the plausibility check against the reported max power.
-    df["peak_monthly_kw"] = peak_kw(energy)
-
-    total = energy.sum(axis=1)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        adjust = np.where(np.isfinite(annual) & (total > 0), annual / total, 1.0)
-    energy = energy * adjust[:, None]
-
-    df["no_energy_info"] = ~np.isfinite(annual)
+    # adjustment - used by the plausibility checks against the reported max power.
+    df["peak_monthly_kw"] = peak_kw(energy_before_adjust)
 
     # --- Max power: reported, else highest monthly power while available ---
     derived_pmax = peak_kw(energy)
     pmax = np.where(has_p, p_raw, derived_pmax)
     pmax_src = np.where(has_p, "reported", np.where(np.isfinite(derived_pmax), "derived", "none"))
-
-    # --- Daily hours: reported, else annual / reference power / available days ---
-    # Reference power: mean monthly kW if the monthly values are powers, else max power.
-    best_or_assumed = np.where(best != "", best, assumed)
-    values_are_power = has_m & np.isin(best_or_assumed, ["A", "B", "W"])
-    unit = np.where(best_or_assumed == "W", 1 / 1000, 1.0)
-    with warnings.catch_warnings():  # all-NaN rows are expected (no monthly data)
-        warnings.simplefilter("ignore", RuntimeWarning)
-        mean_monthly_kw = np.nanmean(np.where(monthly_raw > 0, monthly_raw, np.nan), axis=1) * unit
-    ref_power = np.where(values_are_power, mean_monthly_kw, pmax)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        derived_daily = annual / ref_power / available_days(weekend, year).sum(axis=1)
-    daily = np.where(has_d, d_raw, derived_daily)
-    daily_src = np.where(has_d, "reported", np.where(np.isfinite(derived_daily), "derived", "none"))
 
     df[C.ENERGY_COLS_CLEAN] = energy
     df[C.ANNUAL_KWH_CLEAN] = annual
@@ -188,7 +190,7 @@ def build_clean_values(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         "monthly": ~pd.Series(monthly_src, index=df.index).str.startswith(("reported", "rescaled", "none")),
         "annual": ~pd.Series(annual_src, index=df.index).isin(["reported", "none"]),
         "max_power": pmax_src == "derived",
-        "daily_hours": daily_src == "derived",
+        "daily_hours": ~np.isin(daily_src, ["reported", "none"]),
     }, index=df.index)
     df["imputed_fields"] = imputed.apply(lambda row: ",".join(row.index[row]), axis=1)
     df["was_imputed"] = imputed.any(axis=1)

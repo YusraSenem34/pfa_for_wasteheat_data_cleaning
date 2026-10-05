@@ -35,6 +35,10 @@ plausibility:
   temperature_max_c: 1200   # above: implausible for reported industrial sources
   # Relative tolerance when comparing against physical limits (8760 h, 24 h/day, Pmax).
   limit_tolerance: 0.05
+  # Reported max power more than this many times the highest monthly power -> unit error suspected.
+  pmax_far_above_factor: 100
+  # "Rough estimate" checks (annual = Pmax x hours, profile = Pmax in every month): relative tolerance.
+  estimate_tolerance: 0.01
 
 # BfEE de-minimis thresholds (Merkblatt PfA). Rows are only FLAGGED, never removed.
 bfee_thresholds:

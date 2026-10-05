@@ -34,6 +34,8 @@ def add_presence_flags(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
 
     monthly = df[C.POWER_COLS]
     df["is_flat_profile_raw"] = df["has_monthly"] & monthly.nunique(axis=1).eq(1)
+    df["n_active_months"] = (monthly > 0).sum(axis=1).where(df["has_monthly"])
+    df["has_inactive_months"] = df["has_monthly"] & (df["n_active_months"] < 12)
     return df
 
 

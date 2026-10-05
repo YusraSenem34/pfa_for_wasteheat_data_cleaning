@@ -7,14 +7,9 @@ from typing import Dict
 import pandas as pd
 
 from . import columns as C
+from .definitions import FLAGS, TIERS
 
-FLAG_COLUMNS = [
-    "is_flat_profile_raw", "interp_ambiguous", "was_rescaled", "was_imputed", "no_energy_info",
-    "temp_implausible", "temp_range_mismatch", "pmax_below_monthly", "flh_impossible",
-    "flh_exceeds_availability", "daily_hours_impossible", "is_duplicate_exact", "is_duplicate_name",
-    "below_200mwh", "below_1500h", "below_25c", "below_plant_threshold", "below_site_threshold",
-    "below_bfee_threshold",
-]
+FLAG_COLUMNS = list(FLAGS)
 
 
 def _counts(s: pd.Series, name: str) -> pd.DataFrame:
@@ -30,10 +25,17 @@ def summarize(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         energy_TWh=(C.ANNUAL_KWH_CLEAN, lambda s: round(s.sum() / 1e9, 1)),
     ).reset_index()
     tier["share_%"] = (100 * tier["rows"] / len(df)).round(1)
+    tier["meaning"] = tier["quality_tier"].map(lambda t: TIERS[t].name)
 
     present = [f for f in FLAG_COLUMNS if f in df.columns]
-    flags = pd.DataFrame({"flag": present, "rows": [int(df[f].fillna(False).sum()) for f in present]})
+    flags = pd.DataFrame({
+        "flag": present,
+        "group": [FLAGS[f].group for f in present],
+        "rows": [int(df[f].fillna(False).sum()) for f in present],
+    })
     flags["share_%"] = (100 * flags["rows"] / len(df)).round(1)
+    flags["tier_effect"] = [FLAGS[f].tier for f in present]
+    flags["meaning"] = [FLAGS[f].meaning for f in present]
 
     scale = df.loc[df["was_rescaled"], "scale_factor"]
     scale_bins = pd.cut(scale, [0, 0.1, 0.5, 0.9, 1.1, 2, 10, float("inf")]).value_counts().sort_index()
@@ -56,7 +58,8 @@ def summarize(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
 
 
 def summary_markdown(tables: Dict[str, pd.DataFrame]) -> str:
-    parts = ["# Cleaning summary\n"]
+    parts = ["# Cleaning summary\n",
+             "Counts from the last pipeline run. What each flag and tier means: docs/DATA_QUALITY.md\n"]
     for name, tbl in tables.items():
         parts.append(f"## {name.replace('_', ' ').capitalize()}\n")
         parts.append(tbl.to_markdown(index=False))

@@ -21,7 +21,7 @@ from .config import Config, load_config
 from .consistency import add_presence_flags, check_consistency
 from .imputation import build_clean_values
 from .loading import load_raw, standardize_columns
-from .plausibility import add_plausibility_flags
+from .plausibility import add_medium_flags, add_plausibility_flags
 from .quality import assign_quality_tier
 from .reporting import summarize, summary_markdown
 from .text_cleaning import clean_text_columns
@@ -29,8 +29,17 @@ from .text_cleaning import clean_text_columns
 log = logging.getLogger(__name__)
 
 
-def run(cfg: Config, raw: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-    """Clean the data. `raw` = already loaded German export (e.g. a Streamlit upload)."""
+LLM_LABELS_FILE = "llm_medium.parquet"
+
+
+def run(cfg: Config, raw: Optional[pd.DataFrame] = None,
+        medium_labels: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """Clean the data.
+
+    raw            already loaded German export (e.g. a Streamlit upload); default: file from config
+    medium_labels  LLM medium labels (row_id, Waste_Heat_Potential_Name, LLM_Category);
+                   default: data/processed/llm_medium.parquet if it exists
+    """
     if raw is None:
         df = load_raw(cfg.paths.raw_file, cfg.paths.raw_sheet)
     else:
@@ -41,6 +50,14 @@ def run(cfg: Config, raw: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     df = check_consistency(df, cfg)
     df = build_clean_values(df, cfg)
     df = add_plausibility_flags(df, cfg)
+
+    if medium_labels is None:
+        label_path = Path(cfg.paths.output_dir) / LLM_LABELS_FILE
+        if label_path.exists():
+            medium_labels = pd.read_parquet(label_path)
+    if medium_labels is not None:
+        df = add_medium_flags(df, medium_labels)
+
     df = assign_quality_tier(df)
 
     assert len(df) == df[C.ROW_ID].nunique(), "row ids must stay unique"

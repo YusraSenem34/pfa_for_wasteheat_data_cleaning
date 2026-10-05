@@ -13,6 +13,7 @@ import streamlit as st
 
 from pfa_wasteheat import columns as C
 from pfa_wasteheat.config import load_config
+from pfa_wasteheat.definitions import FLAGS, GROUPS, TIERS, code_names
 from pfa_wasteheat.loading import read_raw_excel
 from pfa_wasteheat.pipeline import run
 from pfa_wasteheat.reporting import FLAG_COLUMNS, summarize
@@ -47,7 +48,15 @@ tables = summarize(df)
 cols = st.columns(4)
 for col, tier in zip(cols, ["A", "B", "C", "D"]):
     n = int((df["quality_tier"] == tier).sum())
-    col.metric(f"Tier {tier}", f"{n:,}", f"{100 * n / len(df):.1f} % of rows", delta_color="off")
+    col.metric(f"Tier {tier} · {TIERS[tier].name}", f"{n:,}", f"{100 * n / len(df):.1f} % of rows",
+               delta_color="off", help=TIERS[tier].meaning)
+
+with st.expander("What do the tiers mean?"):
+    for key, t in TIERS.items():
+        st.markdown(f"**Tier {key} - {t.name}.** {code_names(t.meaning)}  \n"
+                    f"*Rule:* {code_names(t.rule)}  \n*How to use:* {code_names(t.use)}")
+    st.caption("Precedence: any tier-D flag makes a row D; otherwise any tier-C flag makes it C; "
+               "otherwise the consistency status decides between A and B. Full reference: docs/DATA_QUALITY.md")
 
 left, right = st.columns(2)
 with left:
@@ -59,9 +68,26 @@ with left:
     st.dataframe(tables["best_interpretation"], hide_index=True)
 with right:
     st.subheader("Flags")
-    st.dataframe(tables["flags"], hide_index=True, height=420)
+    st.dataframe(tables["flags"][["flag", "rows", "share_%", "tier_effect", "meaning"]], hide_index=True,
+                 height=420, column_config={"meaning": st.column_config.TextColumn(width="large")})
     st.subheader("Rescale factors (rows where nothing fit)")
     st.dataframe(tables["rescale_factors"], hide_index=True)
+
+# --- Flag guide ---
+st.subheader("Flag guide")
+available = [f for f in FLAGS if f in df.columns]
+g1, g2 = st.columns([1, 2])
+group = g1.selectbox("Group", [g for g in GROUPS if any(FLAGS[f].group == g for f in available)])
+chosen = g1.radio("Flag", [f for f in available if FLAGS[f].group == group])
+fdef = FLAGS[chosen]
+n_flag = int(df[chosen].fillna(False).sum())
+with g2:
+    st.markdown(f"#### `{chosen}`  \n{code_names(fdef.meaning)}")
+    st.markdown(f"**Rule:** {code_names(fdef.rule)}")
+    st.markdown(f"**Why it matters:** {code_names(fdef.why)}")
+    effect = {"D": "puts the row in tier **D**", "C": "puts the row in tier **C**"}.get(fdef.tier, "no effect on the tier")
+    st.markdown(f"**Quality tier:** {effect}")
+    st.metric("Rows with this flag", f"{n_flag:,}", f"{100 * n_flag / len(df):.1f} %", delta_color="off")
 
 # --- Agreement plot ---
 st.subheader("Reported vs. recalculated annual energy (best reading)")
@@ -81,6 +107,7 @@ flag = c2.selectbox("Only rows with flag", ["(none)"] + [f for f in FLAG_COLUMNS
 view = df[df["quality_tier"].isin(tiers)]
 if flag != "(none)":
     view = view[view[flag].fillna(False)]
+    c2.caption(code_names(FLAGS[flag].meaning))
 st.caption(f"{len(view):,} rows")
 st.dataframe(view, width="stretch", hide_index=True)
 

@@ -76,7 +76,7 @@ def test_imputation_sources(cases):
     assert d.loc["only_monthly", "annual_source"].startswith("from_monthly:A")
     assert d.loc["only_monthly", C.ANNUAL_KWH_CLEAN] == pytest.approx(energy_A(SEASONAL, 16, False))
     assert d.loc["only_annual", "monthly_source"] == "flat_from_annual"
-    assert d.loc["no_daily_hours", "daily_hours_source"] == "derived"
+    assert d.loc["no_daily_hours", "daily_hours_source"] == "derived_from_max_power"
     assert d.loc["no_daily_hours", "interp_best"] == "B"  # A needs daily hours, B does not
     assert d.loc["nothing", "no_energy_info"]
 
