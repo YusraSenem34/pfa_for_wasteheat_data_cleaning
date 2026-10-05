@@ -47,13 +47,26 @@ FLAGS: Dict[str, Flag] = {
     # ------------------------------------------------------------------ consistency
     "interp_ambiguous": Flag(
         group=GROUPS[0],
-        meaning="More than one reading of the monthly columns fits the annual energy, so the unit the "
-                "reporter meant is not certain.",
-        rule="At least two different readings (A, B, C, W, Wh) are within the tolerance of the reported "
-             "annual energy. A and B count as one when the source runs 24 h on all days, because then they "
-             "are the same calculation.",
-        why="The chosen reading may be wrong. Usually harmless (the annual energy agrees either way), "
-            "but the monthly shape could differ.",
+        meaning="More than one explanation fits, so the unit the reporter meant is not certain.",
+        rule="At least two different readings (A, B, C, W, Wh, MW, MWh) are within their tolerance of the "
+             "reported annual energy (A and B count as one when the source runs 24 h on all days, because "
+             "then they are the same calculation) - or W/Wh fits but there is no max power to decide "
+             "whether the monthly values or the annual energy have the wrong unit.",
+        why="The chosen reading may be wrong. For W/Wh without max power this matters a lot: if in fact "
+            "the annual energy was given in MWh, the true energy is 1000 times larger.",
+    ),
+    "annual_in_mwh": Flag(
+        group=GROUPS[0],
+        meaning="The annual energy was given in MWh instead of kWh. It is multiplied by 1000 in "
+                "annual_kwh_clean, and the readings of the monthly columns are tested against the "
+                "corrected value.",
+        rule="Reported annual energy / max power < 8.76 h × 1.05 (the source would deliver its whole "
+             "year's energy in a few hours), reported annual < annual_mwh_max_reported_kwh (200 MWh), "
+             "max power ≤ annual_mwh_max_power_kw (100 MW), and after × 1000 at least "
+             "annual_mwh_min_flh_after (50) full-load hours.",
+        why="Without this check the source would stay 1000 times too small (e.g. 2,765 kWh/a for a "
+            "cooling system with 848 kW). The size limits keep apart the other explanation - max "
+            "power and monthly values both in W, annual correct - which gives the same full-load hours.",
     ),
     # ------------------------------------------------------------------ changes
     "was_rescaled": Flag(
@@ -61,8 +74,9 @@ FLAGS: Dict[str, Flag] = {
         meaning="Annual energy and monthly profile contradict each other under every reading. The monthly "
                 "values were scaled so that they add up to the reported annual energy.",
         rule="Annual energy and monthly values both reported, no reading within the tolerance "
-             "(consistency_status = inconsistent) and unmatched_strategy = trust_annual. "
-             "scale_factor = reported annual energy / recalculated annual energy.",
+             "(consistency_status = inconsistent) and unmatched_strategy = trust_annual. The shape comes "
+             "from the base reading (A, B or C) of the closest reading. scale_factor = reported (or "
+             "corrected) annual energy / recalculated annual energy under the closest reading.",
         why="Either the annual value or the profile is wrong, and we cannot tell which. The shape of "
             "the months is kept, but their level is an assumption. Check scale_factor: values far from 1 "
             "(e.g. < 0.1 or > 10) mean a large correction.",
@@ -297,7 +311,8 @@ TIERS: Dict[str, Tier] = {
     "B": Tier(
         name="Consistent after a unit fix",
         meaning="Annual energy and monthly profile agree once an obvious unit mistake is corrected: "
-                "monthly values given as kWh per month (C), W instead of kW (W) or Wh (Wh).",
+                "monthly values given as kWh per month (C), in W, Wh, MW or MWh, or the annual energy "
+                "given in MWh.",
         rule="consistency_status = consistent_after_unit_fix, no tier-C flag, no tier-D flag.",
         use="As reliable as A once converted - the correction is explained by a unit, not guessed. "
             "Main analysis: A + B.",

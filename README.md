@@ -62,7 +62,9 @@ All settings (calendar year, tolerances, thresholds, paths) are in `config.yaml`
 
 The register asks for monthly "power profiles in kW", but reporters filled them in
 differently. Every reading is converted to monthly **energy** (kWh) and compared
-with the reported annual energy (tolerance in `config.yaml`, default ±10 %):
+with the reported annual energy (tolerance in `config.yaml`: ±10 % for A, B, W, MW;
+±2 % for C, Wh, MWh, where a unit error gives an exact factor). Before that, the annual
+energy itself is checked for being given in MWh (`annual_in_mwh`):
 
 | Reading | Meaning | Monthly energy |
 |---|---|---|
@@ -71,6 +73,8 @@ with the reported annual energy (tolerance in `config.yaml`, default ±10 %):
 | C | monthly energy in kWh | value |
 | W | W instead of kW | value / 1000 × daily hours × available days |
 | Wh | monthly energy in Wh | value / 1000 |
+| MW | MW instead of kW | value × 1000 × daily hours × available days |
+| MWh | monthly energy in MWh | value × 1000 |
 
 The closest reading wins, but A or B (unit as reported) is preferred whenever it fits.
 If nothing fits, the shape of the closest reading is rescaled to the reported annual

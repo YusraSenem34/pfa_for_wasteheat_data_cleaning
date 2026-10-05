@@ -34,7 +34,7 @@ import pandas as pd
 from . import columns as C
 from .config import Config
 from .energy import (
-    INTERPRETATIONS, available_days, available_hours, flat_monthly_energy,
+    BASE_READING, INTERPRETATIONS, available_days, available_hours, flat_monthly_energy,
     monthly_energy,
 )
 
@@ -70,6 +70,12 @@ def build_clean_values(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     monthly_raw = df[C.POWER_COLS].to_numpy(dtype=float)
 
     stack = {i: monthly_energy(monthly_raw, i, d_raw, weekend, year) for i in INTERPRETATIONS}
+
+    # Annual energy as it should be in kWh: x1000 where it was given in MWh
+    # (consistency.check_annual_unit).
+    annual_in_mwh = df["annual_in_mwh"].to_numpy() if "annual_in_mwh" in df else np.zeros(n, bool)
+    q_kwh = np.where(annual_in_mwh, q_raw * 1000.0, q_raw)
+    q_src = np.where(annual_in_mwh, "reported_MWh_x1000", "reported").astype(object)
     # Reading used when the profile cannot be checked: A if daily hours are known, else B.
     assumed = np.where(has_d, "A", "B")
 
@@ -82,23 +88,28 @@ def build_clean_values(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     # 1) Q and M reported, a reading fits -> keep as reported
     r = has_q & has_m & matched
     energy[r] = _pick_rows(stack, best, n)[r]
-    annual[r] = q_raw[r]
+    annual[r] = q_kwh[r]
     monthly_src[r] = "reported:" + best[r].astype(object)
-    annual_src[r] = "reported"
+    annual_src[r] = q_src[r]
 
     # 2) Q and M reported, nothing fits
     r = has_q & has_m & ~matched
     if strategy == "trust_annual":
-        shape = _pick_rows(stack, best, n)
+        # W/MW/Wh/MWh only differ from A/C by a factor that rescaling removes anyway,
+        # so the shape (and the label) comes from the base reading.
+        base = np.array([BASE_READING.get(b, b) for b in best], dtype=object)
+        shape = _pick_rows(stack, base, n)
         total = shape.sum(axis=1)
+        best_total = _pick_rows(stack, best, n).sum(axis=1)
         with np.errstate(divide="ignore", invalid="ignore"):
-            factor = q_raw / total
+            factor = q_kwh / total
+            scale_vs_best = q_kwh / best_total  # = interp_ratio: how far off the closest reading is
         ok = r & np.isfinite(factor) & (total > 0)
         energy[ok] = shape[ok] * factor[ok, None]
-        scale[ok] = factor[ok]
-        annual[ok] = q_raw[ok]
-        monthly_src[ok] = "rescaled:" + best[ok].astype(object)
-        annual_src[ok] = "reported"
+        scale[ok] = scale_vs_best[ok]
+        annual[ok] = q_kwh[ok]
+        monthly_src[ok] = "rescaled:" + base[ok]
+        annual_src[ok] = q_src[ok]
     else:  # trust_profile
         shape = _pick_rows(stack, assumed, n)
         energy[r] = shape[r]
@@ -117,10 +128,10 @@ def build_clean_values(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     # 4) only Q reported -> flat profile, spread by available hours (or days)
     r = has_q & ~has_m
     weights = np.where(has_d[:, None], available_hours(d_raw, weekend, year), available_days(weekend, year))
-    energy[r] = flat_monthly_energy(q_raw, weights)[r]
-    annual[r] = q_raw[r]
+    energy[r] = flat_monthly_energy(q_kwh, weights)[r]
+    annual[r] = q_kwh[r]
     monthly_src[r] = "flat_from_annual"
-    annual_src[r] = "reported"
+    annual_src[r] = q_src[r]
 
     # 5) neither Q nor M, but max power and daily hours -> flat at max power (old case 9)
     r = ~has_q & ~has_m & has_p & has_d
@@ -188,7 +199,7 @@ def build_clean_values(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
 
     imputed = pd.DataFrame({
         "monthly": ~pd.Series(monthly_src, index=df.index).str.startswith(("reported", "rescaled", "none")),
-        "annual": ~pd.Series(annual_src, index=df.index).isin(["reported", "none"]),
+        "annual": ~pd.Series(annual_src, index=df.index).isin(["reported", "reported_MWh_x1000", "none"]),
         "max_power": pmax_src == "derived",
         "daily_hours": ~np.isin(daily_src, ["reported", "none"]),
     }, index=df.index)

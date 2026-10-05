@@ -121,3 +121,50 @@ def test_doc_is_up_to_date():
     text = DOC_PATH.read_text(encoding="utf-8")
     section = re.search(re.escape(START) + r".*?" + re.escape(END), text, re.S).group(0)
     assert section == render_generated_section(), "run: python -m pfa_wasteheat.definitions"
+
+
+# ------------------------------------------------------------------ unit errors in both directions
+
+def test_monthly_in_mwh(cfg):
+    q = sum(SEASONAL) * 1000.0          # monthly values are MWh, annual is kWh
+    d = run_rows(cfg, {"mwh": make_row(annual=q, monthly=SEASONAL, pmax=2000)})
+    assert d.loc["mwh", "interp_best"] == "MWh"
+    assert d.loc["mwh", "consistency_status"] == "consistent_after_unit_fix"
+    assert d.loc["mwh", C.ANNUAL_KWH_CLEAN] == pytest.approx(q)
+
+
+def test_annual_in_mwh(cfg):
+    # 100 kW, 24 h, all days -> 876,000 kWh; reporter wrote 876 (MWh) into the kWh field
+    d = run_rows(cfg, {"asml_like": make_row(annual=876.0, pmax=120, daily=24, weekend="Ja", monthly=FLAT)})
+    r = d.loc["asml_like"]
+    assert r["annual_in_mwh"] and r["annual_source"] == "reported_MWh_x1000"
+    assert r[C.ANNUAL_KWH_CLEAN] == pytest.approx(876_000)
+    assert r["interp_best"] == "A" and r["consistency_status"] == "consistent_after_unit_fix"
+    assert r["quality_tier"] == "B"
+
+
+def test_everything_in_watts_is_not_annual_in_mwh(cfg):
+    # Max power and monthly in W (18 MW, 13.5 MW), annual correct in kWh -> no x1000
+    d = run_rows(cfg, {"w": make_row(annual=13_850_000, pmax=18_000_000, daily=24, weekend="Ja",
+                                     monthly=[1_500_000] * 12)})
+    r = d.loc["w"]
+    assert not r["annual_in_mwh"]
+    assert r["interp_best"] == "W" and r[C.ANNUAL_KWH_CLEAN] == pytest.approx(13_850_000)
+
+
+def test_exact_readings_use_tight_tolerance(cfg):
+    q = sum(SEASONAL)  # monthly kWh
+    rows = {
+        "exact": make_row(annual=q * 1.01, monthly=SEASONAL, pmax=0, daily=0),
+        "loose": make_row(annual=q * 1.06, monthly=SEASONAL, pmax=0, daily=0),
+    }
+    d = run_rows(cfg, rows)
+    assert d.loc["exact", "interp_best"] == "C" and d.loc["exact", "interp_matched"]
+    assert not d.loc["loose", "interp_matched"]  # 6 % off is not an exact unit error
+
+
+def test_annual_in_mwh_without_monthly_profile(cfg):
+    d = run_rows(cfg, {"flat": make_row(annual=500.0, pmax=100, daily=24, weekend="Ja", monthly=None)})
+    r = d.loc["flat"]
+    assert r["annual_in_mwh"] and r[C.ANNUAL_KWH_CLEAN] == pytest.approx(500_000)
+    assert r["monthly_source"] == "flat_from_annual" and r["annual_source"] == "reported_MWh_x1000"

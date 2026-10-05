@@ -67,8 +67,11 @@ def test_quality_tiers(cases):
 def test_inconsistent_row_is_rescaled_not_forced_silently(cases):
     _, d = cases
     r = d.loc["inconsistent"]
-    assert r["was_rescaled"] and r["scale_factor"] == pytest.approx(5, rel=1e-6)
-    assert r["consistency_status"] == "inconsistent"
+    assert r["was_rescaled"] and r["consistency_status"] == "inconsistent"
+    # scale_factor = reported / recalculated under the closest reading (= interp_ratio)
+    assert r["scale_factor"] == pytest.approx(r["interp_ratio"], rel=1e-9)
+    assert abs(r["scale_factor"] - 1) > 0.10
+    assert r[C.ANNUAL_KWH_CLEAN] == pytest.approx(r[C.ANNUAL_KWH])
 
 
 def test_imputation_sources(cases):

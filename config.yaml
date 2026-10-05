@@ -22,9 +22,21 @@ presence:
 
 consistency:
   # Relative tolerance for "reported annual energy == recalculated annual energy".
+  # Readings that depend on the calendar (A, B, W, MW): working days, holidays and the
+  # year differ between reporters, so a wider tolerance is needed.
   tolerance: 0.10
-  # Which readings of the monthly columns are tested (see consistency.py).
-  interpretations: [A, B, C, W, Wh]
+  # Pure energy readings (C, Wh, MWh) involve no calendar: a unit error gives an exact
+  # factor. 94-100 % of the C and Wh matches are within 2 %. Set to 0.10 to treat all
+  # readings alike (as in the first restructured version).
+  tolerance_exact: 0.02
+  # Annual energy given in MWh instead of kWh (consistency.check_annual_unit): reported
+  # annual / max power < 8.76 h (a thousandth of a year). Only if the reported annual is
+  # small and the max power is believable in kW - otherwise "everything in W" is likelier.
+  annual_mwh_max_reported_kwh: 200000
+  annual_mwh_max_power_kw: 100000
+  annual_mwh_min_flh_after: 50          # full-load hours after x1000 must be at least this
+  # Which readings of the monthly columns are tested (see energy.py / consistency.py).
+  interpretations: [A, B, C, W, Wh, MW, MWh]
   # What to do when no reading fits:
   #   trust_annual  -> keep reported annual energy, rescale the monthly shape to it
   #   trust_profile -> keep the monthly values (reading A), replace annual energy

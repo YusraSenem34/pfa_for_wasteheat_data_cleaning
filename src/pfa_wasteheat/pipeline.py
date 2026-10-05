@@ -18,7 +18,7 @@ import pandas as pd
 
 from . import columns as C
 from .config import Config, load_config
-from .consistency import add_presence_flags, check_consistency
+from .consistency import add_presence_flags, check_annual_unit, check_consistency
 from .imputation import build_clean_values
 from .loading import load_raw, standardize_columns
 from .plausibility import add_medium_flags, add_plausibility_flags
@@ -47,6 +47,7 @@ def run(cfg: Config, raw: Optional[pd.DataFrame] = None,
 
     df = clean_text_columns(df)
     df = add_presence_flags(df, cfg)
+    df = check_annual_unit(df, cfg)
     df = check_consistency(df, cfg)
     df = build_clean_values(df, cfg)
     df = add_plausibility_flags(df, cfg)

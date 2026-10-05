@@ -30,7 +30,11 @@ class Presence:
 @dataclass
 class Consistency:
     tolerance: float = 0.10
-    interpretations: List[str] = field(default_factory=lambda: ["A", "B", "C", "W", "Wh"])
+    tolerance_exact: float = 0.02
+    annual_mwh_max_reported_kwh: float = 200_000
+    annual_mwh_max_power_kw: float = 100_000
+    annual_mwh_min_flh_after: float = 50
+    interpretations: List[str] = field(default_factory=lambda: ["A", "B", "C", "W", "Wh", "MW", "MWh"])
     unmatched_strategy: str = "trust_annual"
 
 

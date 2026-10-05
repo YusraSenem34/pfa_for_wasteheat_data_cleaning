@@ -82,16 +82,18 @@ value (140 rows); before, ≤ 1 h was treated as missing.
 
 The platform asks for monthly "power profiles in kW", but reporters filled them in
 differently. For every row with both an annual value and a monthly profile, the 12
-values are converted to energy under five readings, and each result is compared with
+values are converted to energy under seven readings, and each result is compared with
 the reported annual energy:
 
-| Reading | The reporter meant … | Annual energy = |
-|---|---|---|
-| **A** | kW while the source is available | Σ value × daily hours × available days |
-| **B** | kW averaged over the whole month | Σ value × 24 h × days in month |
-| **C** | kWh per month (energy, not power) | Σ value |
-| **W** | W instead of kW, while available | Σ value / 1000 × daily hours × available days |
-| **Wh** | Wh per month | Σ value / 1000 |
+| Reading | The reporter meant … | Annual energy = | Tolerance |
+|---|---|---|---|
+| **A** | kW while the source is available | Σ value × daily hours × available days | ±10 % |
+| **B** | kW averaged over the whole month | Σ value × 24 h × days in month | ±10 % |
+| **C** | kWh per month (energy, not power) | Σ value | ±2 % |
+| **W** | W instead of kW, while available | Σ value / 1000 × daily hours × available days | ±10 % |
+| **Wh** | Wh per month | Σ value / 1000 | ±2 % |
+| **MW** | MW instead of kW, while available | Σ value × 1000 × daily hours × available days | ±10 % |
+| **MWh** | MWh per month | Σ value × 1000 | ±2 % |
 
 Available days = all days if `Weekend_Availability` is *ja*; otherwise Monday–Friday
 minus nationwide public holidays (2025: 252 days).
@@ -109,20 +111,57 @@ annual energy of 400,000 kWh:
 
 How the result is chosen:
 
-- A reading **fits** if reported / recalculated is within the tolerance (default ±10 %).
-- If A or B fits, it wins (the unit is as the platform asked). A unit fix (C, W, Wh)
-  is only chosen if neither A nor B fits.
+- A reading **fits** if reported / recalculated is within its tolerance.
+- If A or B fits, it wins (the unit is as the platform asked). A unit fix (C, W, Wh,
+  MW, MWh) is only chosen if neither A nor B fits.
 - Otherwise the reading **closest** to the reported value wins (smallest log-distance).
   "First match wins" is no longer used.
 
-`ratio_A` … `ratio_Wh` store reported / recalculated for every reading, so you can look
+**Why two tolerances.** Readings A, B, W and MW multiply by hours and days, and
+reporters use different calendars (working days, holidays, year), so their results
+scatter by a few percent: only 61 % of the A matches are within 2 %. Readings C, Wh and
+MWh involve no calendar - a unit error gives an exact factor. In the 2025 data, 94 % of
+the C matches and all Wh matches are within 2 %. For MWh the tight tolerance is
+essential: around the factor 1000 there is a broad background of rows that are simply
+inconsistent, and only the sharp spike at exactly 1000 (107 rows within ±0.5 %, against
+~17 per band of the same width around it) is a real unit error. At ±10 % about 300 of
+the 406 "MWh" matches would be false. Set `tolerance_exact: 0.10` in `config.yaml` to
+treat all readings alike.
+
+`ratio_A` … `ratio_MWh` store reported / recalculated for every reading, so you can look
 at the distribution yourself (the cleaning app plots it).
+
+### 3.2a Annual energy given in MWh
+
+Unit errors can also sit in the annual field. If the annual energy was entered in MWh,
+it is 1000 times too small - and reading W (monthly 1000 times too large) would "fit"
+and shrink the monthly values instead, leaving the source 1000 times too small.
+Example: ASML Berlin, cooling system, max power 848 kW, reported 2,765 kWh/a - i.e. full
+power for 3 hours a year. As 2,765 MWh it is a plausible 3,260 full-load hours.
+
+So **before** the readings are tested, `check_annual_unit` flags `annual_in_mwh` when:
+
+| Condition | Default | Why |
+|---|---|---|
+| reported annual / max power (full-load hours as reported) | < 8.76 h (+5 %) | The whole year's energy in a few hours is impossible |
+| after × 1000 | ≥ 50 full-load hours | Otherwise × 1000 does not make it plausible either |
+| reported annual energy | < 200 MWh | A 1000× error makes the value tiny |
+| reported max power | ≤ 100 MW | Must be believable in kW |
+
+The last two conditions separate it from the other explanation with the same full-load
+hours: **max power and monthly values in W, annual correct** (e.g. Girnghuber: max power
+"18,000,000 kW" and annual 13.85 GWh - the max power is in W, not the annual energy).
+
+Flagged rows are tested against annual × 1000, and `annual_kwh_clean` uses the
+corrected value (`annual_source = reported_MWh_x1000`). In 2025: 224 rows; 132 then agree
+with their monthly profile. In 53 of them the monthly values fit as MWh too - the
+reporter used MWh for all energy values.
 
 | `consistency_status` | Meaning | Rows (2025) |
 |---|---|---|
-| `consistent_as_reported` | Reading A or B fits | 10,208 |
-| `consistent_after_unit_fix` | Only C, W or Wh fits | 3,421 |
-| `inconsistent` | No reading fits | 8,144 |
+| `consistent_as_reported` | Reading A or B fits, annual in kWh | 10,207 |
+| `consistent_after_unit_fix` | Fits only after a unit fix (C, W, Wh, MW, MWh or annual in MWh) | 3,405 |
+| `inconsistent` | No reading fits | 8,161 |
 | `not_testable` | Annual energy or monthly profile missing | 425 |
 
 ### 3.3 Building the clean values
@@ -132,12 +171,17 @@ of these rules (`imputation.py`):
 
 | Annual (Q) | Monthly (M) | Clean monthly energy | Clean annual energy |
 |---|---|---|---|
-| yes | yes, a reading fits | best reading | reported |
-| yes | yes, nothing fits | shape of the closest reading, **rescaled** to Q | reported |
+| yes | yes, a reading fits | best reading | reported (× 1000 if `annual_in_mwh`) |
+| yes | yes, nothing fits | shape of the closest reading, **rescaled** to Q | reported (× 1000 if `annual_in_mwh`) |
 | no | yes | reading A (B if daily hours are missing) | sum of the months |
-| yes | no | **flat**, spread over the available hours | reported |
+| yes | no | **flat**, spread over the available hours | reported (× 1000 if `annual_in_mwh`) |
 | no | no, but max power + daily hours | **flat** at max power | sum of the months |
 | no | no, otherwise | none → `no_energy_info` | none |
+
+For rescaled rows, the shape comes from the **base** reading (A for A/W/MW, B, C for
+C/Wh/MWh): readings that differ only by a factor of 1000 have the same shape, and the
+factor disappears in the rescaling. `interp_best` still names the closest reading, and
+`scale_factor` = reported / recalculated under it (= `interp_ratio`).
 
 With `unmatched_strategy: trust_profile` in `config.yaml`, the second rule changes:
 the monthly values (reading A) are kept and the annual energy is replaced by their sum.
@@ -183,7 +227,8 @@ cover the same 16 combinations:
 | 15 | ✔ | – | ✔ | – | updated | flat from annual; max power derived | 179 | C |
 | 16 | ✔ | – | – | ✔ | updated | consistency check (B, C, Wh); 24 h assumed; max power derived | 6 | C |
 | unmatched 1–3 | | | | | W→kW, kWh→kW, Wh→kW | readings W, C, Wh in the consistency check | | B |
-| unmatched 4 | | | | | scaled to annual | `was_rescaled`, `scale_factor` | 8,144 | C |
+| *(new)* | | | | | – | readings MW, MWh; annual energy in MWh (`annual_in_mwh`) | 224 annual + 228 monthly | B |
+| unmatched 4 | | | | | scaled to annual | `was_rescaled`, `scale_factor` | 8,161 | C |
 | BfEE filters | | | | | deleted | `below_*` flags | 4,883 | unchanged |
 
 Rows in a case can still end up in tier D through other flags (e.g. temperature,
@@ -194,13 +239,14 @@ only B, C and Wh can be tested.
 
 | Column | Value | Meaning |
 |---|---|---|
-| `monthly_source` | `reported:A` (B, C, W, Wh) | Reported monthly values, converted with this reading |
-| | `rescaled:A` (…) | Shape of this reading, scaled to the reported annual energy |
+| `monthly_source` | `reported:A` (B, C, W, Wh, MW, MWh) | Reported monthly values, converted with this reading |
+| | `rescaled:A` (B, C) | Shape of this base reading, scaled to the (corrected) annual energy |
 | | `reported:A_assumed` | No annual value to check against; reading A (or B) assumed |
 | | `flat_from_annual` | No monthly values; annual energy spread evenly over the available hours |
 | | `flat_from_max_power` | No monthly or annual values; max power × available hours |
 | | `none` | No energy information |
 | `annual_source` | `reported` | Reported annual energy |
+| | `reported_MWh_x1000` | Reported annual energy was in MWh; × 1000 (`annual_in_mwh`) |
 | | `from_monthly:A_assumed` | Sum of the monthly energies |
 | | `from_max_power` | Max power × available hours |
 | `max_power_source` | `reported` / `derived` / `none` | Derived = highest monthly power while available |
@@ -217,7 +263,7 @@ only B, C and Wh can be tested.
 | Tier | Name | Meaning | Rule | How to use |
 |---|---|---|---|---|
 | **A** | Consistent as reported | Annual energy and monthly profile agree in the unit the platform asked for (kW). Nothing was filled in and nothing is physically impossible. | `consistency_status` = `consistent_as_reported` (best reading A or B within the tolerance), no tier-C flag, no tier-D flag. | The most reliable rows. Use alone for a strict check of the main results. |
-| **B** | Consistent after a unit fix | Annual energy and monthly profile agree once an obvious unit mistake is corrected: monthly values given as kWh per month (C), W instead of kW (W) or Wh (Wh). | `consistency_status` = `consistent_after_unit_fix`, no tier-C flag, no tier-D flag. | As reliable as A once converted - the correction is explained by a unit, not guessed. Main analysis: A + B. |
+| **B** | Consistent after a unit fix | Annual energy and monthly profile agree once an obvious unit mistake is corrected: monthly values given as kWh per month (C), in W, Wh, MW or MWh, or the annual energy given in MWh. | `consistency_status` = `consistent_after_unit_fix`, no tier-C flag, no tier-D flag. | As reliable as A once converted - the correction is explained by a unit, not guessed. Main analysis: A + B. |
 | **C** | Usable, but corrected or completed | Annual energy and profile contradict each other (the profile was rescaled), or at least one of the key values was missing and filled in. | `was_rescaled` or `was_imputed`, and no tier-D flag. | Fine for counting and totals (e.g. energy per region). For model targets use only the values that were reported: check `*_source` and `imputed_fields`. Sensitivity analysis: A + B + C. |
 | **D** | Not usable as a model target | No energy information, physically impossible values, or an exact copy of another row. | Any of: `no_energy_info`, `temp_implausible`, `flh_impossible`, `daily_hours_impossible`, `is_duplicate_exact`. `quality_reasons` lists which. | Exclude from model training and evaluation. Keep in the data so the numbers in the thesis add up to the original register. |
 
@@ -229,10 +275,18 @@ Precedence: a row with any tier-D flag is D, otherwise any tier-C flag makes it 
 
 #### `interp_ambiguous`
 
-More than one reading of the monthly columns fits the annual energy, so the unit the reporter meant is not certain.
+More than one explanation fits, so the unit the reporter meant is not certain.
 
-- **Rule:** At least two different readings (A, B, C, W, Wh) are within the tolerance of the reported annual energy. A and B count as one when the source runs 24 h on all days, because then they are the same calculation.
-- **Why it matters:** The chosen reading may be wrong. Usually harmless (the annual energy agrees either way), but the monthly shape could differ.
+- **Rule:** At least two different readings (A, B, C, W, Wh, MW, MWh) are within their tolerance of the reported annual energy (A and B count as one when the source runs 24 h on all days, because then they are the same calculation) - or W/Wh fits but there is no max power to decide whether the monthly values or the annual energy have the wrong unit.
+- **Why it matters:** The chosen reading may be wrong. For W/Wh without max power this matters a lot: if in fact the annual energy was given in MWh, the true energy is 1000 times larger.
+- **Quality tier:** no effect on the tier
+
+#### `annual_in_mwh`
+
+The annual energy was given in MWh instead of kWh. It is multiplied by 1000 in `annual_kwh_clean`, and the readings of the monthly columns are tested against the corrected value.
+
+- **Rule:** Reported annual energy / max power < 8.76 h × 1.05 (the source would deliver its whole year's energy in a few hours), reported annual < `annual_mwh_max_reported_kwh` (200 MWh), max power ≤ `annual_mwh_max_power_kw` (100 MW), and after × 1000 at least `annual_mwh_min_flh_after` (50) full-load hours.
+- **Why it matters:** Without this check the source would stay 1000 times too small (e.g. 2,765 kWh/a for a cooling system with 848 kW). The size limits keep apart the other explanation - max power and monthly values both in W, annual correct - which gives the same full-load hours.
 - **Quality tier:** no effect on the tier
 
 ### Changes made by the pipeline
@@ -241,7 +295,7 @@ More than one reading of the monthly columns fits the annual energy, so the unit
 
 Annual energy and monthly profile contradict each other under every reading. The monthly values were scaled so that they add up to the reported annual energy.
 
-- **Rule:** Annual energy and monthly values both reported, no reading within the tolerance (`consistency_status` = inconsistent) and `unmatched_strategy` = `trust_annual`. `scale_factor` = reported annual energy / recalculated annual energy.
+- **Rule:** Annual energy and monthly values both reported, no reading within the tolerance (`consistency_status` = inconsistent) and `unmatched_strategy` = `trust_annual`. The shape comes from the base reading (A, B or C) of the closest reading. `scale_factor` = reported (or corrected) annual energy / recalculated annual energy under the closest reading.
 - **Why it matters:** Either the annual value or the profile is wrong, and we cannot tell which. The shape of the months is kept, but their level is an assumption. Check `scale_factor`: values far from 1 (e.g. < 0.1 or > 10) mean a large correction.
 - **Quality tier:** → tier **C**
 

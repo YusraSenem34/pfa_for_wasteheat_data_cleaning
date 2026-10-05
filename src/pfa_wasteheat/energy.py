@@ -22,8 +22,18 @@ INTERPRETATIONS: Dict[str, str] = {
     "C": "monthly energy in kWh, not power",
     "W": "W instead of kW, while available (A / 1000)",
     "Wh": "monthly energy in Wh, not kWh (C / 1000)",
+    "MW": "MW instead of kW, while available (A x 1000)",
+    "MWh": "monthly energy in MWh, not kWh (C x 1000)",
 }
-NEEDS_DAILY_HOURS = {"A", "W"}
+NEEDS_DAILY_HOURS = {"A", "W", "MW"}
+
+# Readings without any calendar assumption: a unit error gives an EXACT factor here,
+# so they are tested with the tighter tolerance (consistency.tolerance_exact).
+EXACT_READINGS = {"C", "Wh", "MWh"}
+
+# Readings that differ only by a factor of 1000 have the same monthly SHAPE. When a row
+# has to be rescaled, its shape comes from the base reading.
+BASE_READING = {"A": "A", "B": "B", "C": "C", "W": "A", "MW": "A", "Wh": "C", "MWh": "C"}
 
 
 @lru_cache(maxsize=None)
@@ -85,6 +95,10 @@ def monthly_energy(
         return p / 1000.0 * available_hours(daily_hours, weekend_available, year)
     if interpretation == "Wh":
         return p / 1000.0
+    if interpretation == "MW":
+        return p * 1000.0 * available_hours(daily_hours, weekend_available, year)
+    if interpretation == "MWh":
+        return p * 1000.0
     raise ValueError(f"Unknown interpretation {interpretation!r}")
 
 
