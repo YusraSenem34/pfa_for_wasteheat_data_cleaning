@@ -970,7 +970,7 @@ class DataCleaner:
             df.loc[case16_mask, 'Annual_Energy_Months'] = calculator.calculate_annual_energy(df[case16_mask])
             
             df.loc[case16_mask, 'Update_History'] += "Case 16: Updated AVG Daily Availability + MAX Thermal Power | "
-            df.loc[case15_mask, 'case_resolved'] = True
+            df.loc[case16_mask, 'case_resolved'] = True
             self._log_updated_rows(df, case16_mask, rows_before, 'Case 16 Update Rows')
             
         power_stats = self._get_power_statistics(df)  

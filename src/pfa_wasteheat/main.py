@@ -16,7 +16,7 @@ from utils import sanity_check
 # Import the geocoding function from your external file
 from geocode import geocode_dataframe
 
-from categorization_of_wasteheat import categorize_waste_heat # Uncomment to use LLM
+# from categorization_of_wasteheat import categorize_waste_heat # Uncomment to use LLM
 
 class WasteHeatAnalysisPipeline:
     def __init__(self, input_path=None):
