@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pytest)",
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(python -m pfa_wasteheat.pipeline)",
+      "Bash(python -m pfa_wasteheat.pipeline *)",
+      "Bash(python -m pfa_wasteheat.definitions)",
+      "Bash(python -m pfa_wasteheat.enrich.geocode --no-online *)",
+      "Bash(pip install -r requirements.txt)",
+      "Bash(pip install -e .)",
+      "Bash(pip list)",
+      "Bash(pip show *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)"
+    ],
+    "ask": [
+      "Bash(python -m pfa_wasteheat.enrich.geocode *)",
+      "Bash(python -m pfa_wasteheat.enrich.medium_llm *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(git reset *)",
+      "Bash(git rm *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./data/raw/**)",
+      "Edit(./data/*.xlsx)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)"
+    ]
+  }
+}

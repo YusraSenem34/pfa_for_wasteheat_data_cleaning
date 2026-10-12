@@ -74,6 +74,7 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Geocode site addresses")
     parser.add_argument("--legacy", default=None, help="old Excel file with lat/long to re-use")
     parser.add_argument("--no-online", action="store_true", help="only use cache/legacy, no requests")
+    parser.add_argument("--no-excel", action="store_true", help="skip the Excel copy (faster)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
 
@@ -93,6 +94,10 @@ def main(argv=None) -> None:
     geo = add_coordinates(df, cache)
     geo.to_parquet(out_dir / "pfa_cleaned_geo.parquet", index=False)
     log.info("Coordinates found for %d of %d rows", geo["lat"].notna().sum(), len(geo))
+    if not args.no_excel:
+        excel_path = out_dir / "pfa_cleaned_geo.xlsx"
+        geo.to_excel(excel_path, index=False)
+        log.info("Saved %s", excel_path)
 
 
 if __name__ == "__main__":

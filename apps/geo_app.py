@@ -104,7 +104,8 @@ if len(selected) == 1:
         prof = energy_profile(row, cfg.calendar_year)
         ts = prof.waste_heat.profile_data
         c1, c2 = st.columns([3, 1])
-        c1.line_chart(ts, color="#ff4b4b", y_label="kW")
+        # plain column name: brackets like "[kW]" break the chart in some Streamlit versions
+        c1.line_chart(ts.iloc[:, 0].rename("kW").to_frame(), color="#ff4b4b", y_label="kW")
         c2.metric("Annual energy", f"{prof.waste_heat.aggregated_demands:,.0f} kWh")
         c2.metric("Temperature", f"{row.get(C.TEMP_C)} °C")
         c2.metric("Availability", f"{row[C.DAILY_HOURS_CLEAN]:.1f} h/day")

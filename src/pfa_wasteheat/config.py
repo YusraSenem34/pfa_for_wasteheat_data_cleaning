@@ -49,7 +49,7 @@ class Plausibility:
 
 @dataclass
 class BfeeThresholds:
-    plant_min_annual_kwh: float = 200_000
+    plant_min_annual_kwh: float = 200_000 # wasteheat plants below this threshold are not considered for bfee
     plant_min_hours: float = 1_500
     plant_min_temperature_c: float = 25
     site_min_annual_kwh: float = 800_000
